@@ -16,6 +16,14 @@ test("push verso Supabase: RPC con payload e service key", async () => {
   assert.equal(c.headers.Authorization, "Bearer srv");
   assert.deepEqual(c.body, { payload });
   assert.equal(r.accounts, 1);
+  assert.equal(c.headers["Content-Profile"], undefined);
+});
+
+test("push verso Supabase in uno schema dedicato", async () => {
+  const m = mockFetch(() => ({ body: { ok: true } }));
+  await pushToSupabase(payload, { url: "https://x.supabase.co", serviceKey: "k", schema: "yrols", fetch: m.fetch });
+  assert.equal(m.calls[0]!.headers["Content-Profile"], "yrols");
+  assert.equal(m.calls[0]!.headers["Accept-Profile"], "yrols");
 });
 
 test("push verso Supabase: errore leggibile", async () => {
@@ -43,6 +51,6 @@ test("config: Supabase ha precedenza e EB_STATE viene letto", () => {
     EB_STATE: "{}",
   });
   assert.equal(typeof cfg.push, "function");
-  assert.equal(cfg.pushTarget, "Supabase (x.supabase.co, rpc yrols_bank_sync)");
+  assert.equal(cfg.pushTarget, "Supabase (x.supabase.co, yrols.yrols_bank_sync)");
   assert.equal(cfg.stateJson, "{}");
 });

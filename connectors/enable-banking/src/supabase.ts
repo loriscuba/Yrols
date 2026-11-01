@@ -8,6 +8,8 @@ export interface SupabasePushOptions {
   serviceKey: string;
   /** Nome della funzione Postgres che accetta il payload del contratto v1. */
   rpc?: string;
+  /** Schema Postgres della funzione (es. "yrols"); deve essere tra gli "Exposed schemas" dell'API. */
+  schema?: string;
   fetch?: typeof fetch;
   timeoutMs?: number;
 }
@@ -22,6 +24,8 @@ export async function pushToSupabase(payload: SyncPayload, opts: SupabasePushOpt
       apikey: opts.serviceKey,
       Authorization: `Bearer ${opts.serviceKey}`,
       "Content-Type": "application/json",
+      // PostgREST: per uno schema diverso da public si indica il profilo nella richiesta.
+      ...(opts.schema && opts.schema !== "public" ? { "Content-Profile": opts.schema, "Accept-Profile": opts.schema } : {}),
     },
     body: JSON.stringify({ payload }),
     signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
