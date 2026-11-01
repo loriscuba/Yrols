@@ -5,3 +5,8 @@ data/
 *.db-*
 .env
 .DS_Store
+# Chiavi e segreti: mai nel repository
+*.pem
+*.key
+.env
+**/keys/
