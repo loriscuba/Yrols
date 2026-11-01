@@ -1,8 +1,8 @@
 # Pubblica su GitHub Pages:
 #   https://loriscuba.github.io/Yrols/           → cruscotto (con login Supabase)
 #   https://loriscuba.github.io/Yrols/callback/  → pagina di ritorno del consenso Enable Banking
-# Richiede: Settings → Pages → Source = "GitHub Actions" e le variabili di repository
-# YROLS_SUPABASE_URL e YROLS_SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions → Variables).
+# Richiede: Settings → Pages → Source = "GitHub Actions". URL e chiave pubblica di Supabase hanno un
+# valore predefinito qui sotto; si possono cambiare con le variabili YROLS_SUPABASE_URL / YROLS_SUPABASE_ANON_KEY.
 # La chiave "anon" è pensata per stare nel browser: i dati sono protetti dalle regole del database.
 name: Cruscotto su GitHub Pages
 
@@ -38,8 +38,9 @@ jobs:
         run: npm run build -w apps/web
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
-          VITE_SUPABASE_URL: ${{ vars.YROLS_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.YROLS_SUPABASE_ANON_KEY }}
+          # Progetto Supabase "Demo IPA", schema yrols. La chiave publishable è fatta per stare nel browser.
+          VITE_SUPABASE_URL: ${{ vars.YROLS_SUPABASE_URL || 'https://exchjppslwhbnbzuhfqs.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.YROLS_SUPABASE_ANON_KEY || 'sb_publishable_SxSgB8SFGXBxN2HzQBQfFA_ppbgB_ZT' }}
       - name: Componi il sito
         run: |
           mkdir -p site
