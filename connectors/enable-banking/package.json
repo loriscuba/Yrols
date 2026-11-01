@@ -1,0 +1,31 @@
+{
+  "name": "@yrols/enable-banking-connector",
+  "version": "0.1.0",
+  "description": "Connettore Enable Banking (open banking PSD2) per il cruscotto Yrols: conti, saldi e movimenti.",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": "./dist/src/index.js"
+  },
+  "bin": {
+    "yrols-eb": "dist/src/cli.js"
+  },
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "start": "node --env-file-if-exists=.env dist/src/server.js",
+    "cli": "node --env-file-if-exists=.env dist/src/cli.js",
+    "cert": "node scripts/cert.mjs"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
