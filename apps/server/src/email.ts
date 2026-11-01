@@ -36,39 +36,50 @@ export function storeSuggestion(db: DB, messageId: string, e: ParsedEmail): bool
   return r.changes > 0;
 }
 
-let scanning = false;
-
-export async function scanMailbox(db: DB, cfg: ImapConfig) {
-  if (scanning) return { skipped: true, scanned: 0, found: 0 };
-  scanning = true;
+/** Legge le email recenti della casella e restituisce quelle non ancora viste. Condiviso da server locale e GitHub Actions. */
+export async function* readMailbox(cfg: ImapConfig, seen: Set<string>): AsyncGenerator<{ messageId: string; email: ParsedEmail }> {
   const client = new ImapFlow({
     host: cfg.host, port: cfg.port, secure: cfg.secure,
     auth: { user: cfg.user, pass: cfg.password }, logger: false,
   });
-  let scanned = 0, found = 0;
   try {
     await client.connect();
     const lock = await client.getMailboxLock(cfg.mailbox);
     try {
       const since = new Date(Date.now() - cfg.sinceDays * 864e5);
       const uids = (await client.search({ since }, { uid: true })) || [];
-      const seen = new Set((db.prepare(`SELECT message_id FROM email_suggestions`).all() as { message_id: string }[]).map((r) => r.message_id));
       const recent = uids.slice(-cfg.maxMessages);
+      if (recent.length === 0) return;
       for await (const msg of client.fetch(recent, { uid: true, envelope: true, source: true }, { uid: true })) {
-        scanned++;
-        const mid = msg.envelope?.messageId || `uid:${cfg.mailbox}:${msg.uid}`;
-        if (seen.has(mid) || !msg.source) continue;
+        const messageId = msg.envelope?.messageId || `uid:${cfg.mailbox}:${msg.uid}`;
+        if (seen.has(messageId) || !msg.source) continue;
         const parsed = await simpleParser(msg.source);
         const text = parsed.text || (typeof parsed.html === "string" ? parsed.html.replace(/<[^>]+>/g, " ") : "");
-        if (storeSuggestion(db, mid, { from: parsed.from?.text ?? "", subject: parsed.subject ?? "", text, date: parsed.date })) found++;
+        yield { messageId, email: { from: parsed.from?.text ?? "", subject: parsed.subject ?? "", text, date: parsed.date } };
       }
     } finally {
       lock.release();
     }
     await client.logout();
   } finally {
-    scanning = false;
     client.close();
+  }
+}
+
+let scanning = false;
+
+export async function scanMailbox(db: DB, cfg: ImapConfig) {
+  if (scanning) return { skipped: true, scanned: 0, found: 0 };
+  scanning = true;
+  let scanned = 0, found = 0;
+  try {
+    const seen = new Set((db.prepare(`SELECT message_id FROM email_suggestions`).all() as { message_id: string }[]).map((r) => r.message_id));
+    for await (const m of readMailbox(cfg, seen)) {
+      scanned++;
+      if (storeSuggestion(db, m.messageId, m.email)) found++;
+    }
+  } finally {
+    scanning = false;
   }
   db.prepare(`INSERT INTO bank_syncs (source, synced_at, received_at, summary) VALUES ('email', ?, ?, ?)`)
     .run(new Date().toISOString(), new Date().toISOString(), JSON.stringify({ scanned, found }));

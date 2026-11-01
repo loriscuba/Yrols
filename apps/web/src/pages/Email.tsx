@@ -5,7 +5,7 @@ import { api, type Suggestion } from "../api";
 import { date, dateTime, label } from "../format";
 import { Card, Empty, ErrorBanner } from "../components/ui";
 
-interface Status { configured: boolean; user: string | null; host: string | null; lastScan: { at: string; summary: string } | null }
+interface Status { configured: boolean; cloud?: boolean; user: string | null; host: string | null; lastScan: { at: string; summary: string } | null }
 
 export function EmailPage() {
   const status = useData<Status>("/email/status");
@@ -28,9 +28,11 @@ export function EmailPage() {
       <header className="page-head">
         <div>
           <h1>Da email</h1>
-          <p className="sub">{status.data?.configured ? `Casella ${status.data.user}${last ? ` · ultima lettura ${dateTime(last.at)}` : ""}` : "Bollette e scadenze trovate nella posta"}</p>
+          <p className="sub">{status.data?.cloud
+            ? (last ? `Letta in automatico ogni ora · ultima lettura ${dateTime(last.at)}` : "Bollette e scadenze trovate nella posta")
+            : status.data?.configured ? `Casella ${status.data.user}${last ? ` · ultima lettura ${dateTime(last.at)}` : ""}` : "Bollette e scadenze trovate nella posta"}</p>
         </div>
-        {status.data?.configured && <button className="btn primary" onClick={scan} disabled={busy}><RefreshCw size={16} className={busy ? "spin" : ""} />{busy ? "Lettura in corso…" : "Controlla la posta"}</button>}
+        {status.data?.configured && !status.data.cloud && <button className="btn primary" onClick={scan} disabled={busy}><RefreshCw size={16} className={busy ? "spin" : ""} />{busy ? "Lettura in corso…" : "Controlla la posta"}</button>}
       </header>
       <ErrorBanner message={error ?? err} />
       {msg && <div className="banner info">{msg}</div>}
@@ -38,11 +40,14 @@ export function EmailPage() {
         <Card title="Collega la tua casella">
           <div className="prose">
             <p>Il cruscotto legge la posta via IMAP, riconosce bollette e scadenze (fornitore, importo, data) e te le propone qui: niente viene aggiunto senza la tua conferma.</p>
+            {status.data.cloud ? (
+              <p>Su GitHub, in <em>Settings → Secrets and variables → Actions</em>, aggiungi i secret <code>YROLS_IMAP_HOST</code> (es. <code>imap.gmail.com</code>), <code>YROLS_IMAP_USER</code> e <code>YROLS_IMAP_PASSWORD</code>. La posta verrà letta ogni ora.</p>
+            ) : (<>
             <p>Imposta nel file <code>.env</code> del server:</p>
             <pre>{`YROLS_IMAP_HOST=imap.gmail.com
 YROLS_IMAP_USER=tuo.indirizzo@gmail.com
 YROLS_IMAP_PASSWORD=password-per-le-app
-YROLS_IMAP_INTERVAL_MIN=60`}</pre>
+YROLS_IMAP_INTERVAL_MIN=60`}</pre></>)}
             <p>Con Gmail serve una <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">password per le app</a> (richiede la verifica in due passaggi). Per altri provider usa il loro server IMAP, ad esempio <code>imap.libero.it</code>, <code>imap.mail.yahoo.com</code>, <code>outlook.office365.com</code>.</p>
           </div>
         </Card>
