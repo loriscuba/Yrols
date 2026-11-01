@@ -15,8 +15,9 @@ normalizzato del cruscotto e li invia a `POST {YROLS_URL}/api/banks/sync`.
 2. Crea un'applicazione (*Applications → Register new application*):
    - ambiente **Sandbox** per le prove con banche finte, **Production** per i tuoi conti reali
      (per uso personale l'app di produzione si attiva collegando i propri conti, senza contratto commerciale);
-   - **Redirect URL**: `https://localhost:8787/api/banks/callback`
-     (Enable Banking accetta solo indirizzi **https**; vedi il punto 3 per come gestirlo in locale);
+   - **Redirect URL**: `https://loriscuba.github.io/Yrols/callback/`
+     (Enable Banking accetta solo indirizzi **https**; è una pagina statica su GitHub Pages, vedi sotto).
+     In alternativa `https://localhost:8787/api/banks/callback` con il server in https;
    - lascia che il pannello generi la coppia di chiavi: scarica il file `.pem` della **chiave privata**.
 3. Annota l'**Application ID** (è il `kid` del JWT).
 4. Metti la chiave in `connectors/enable-banking/keys/enable-banking.pem`
@@ -56,11 +57,17 @@ npm run cli -- connect "Intesa Sanpaolo" IT # stampa il link per il consenso
 ```
 
 Apri il link e autenticati sulla banca: la banca ti rimanda sulla Redirect URL
-(`https://localhost:8787/api/banks/callback?code=...&state=...`). Due modi per completare:
+con `?code=...&state=...`. Il collegamento va completato entro 1 ora dal `connect`.
 
-- **Senza certificato (il più semplice)**: il browser mostrerà un errore di connessione,
-  è normale. Copia l'indirizzo completo dalla barra del browser e lancia
-  `npm run cli -- callback "<indirizzo copiato>"`. Il consenso è valido per 1 ora dall'avvio.
+- **Pagina GitHub Pages (consigliato)**: `https://loriscuba.github.io/Yrols/callback/`
+  mostra il comando pronto da copiare (`npm run cli -- callback "..."`) e un pulsante
+  per inviarlo al connettore locale se è avviato. La pagina è statica, non invia il
+  codice da nessuna parte, e il codice senza la chiave privata non dà accesso ai conti.
+  Sorgente in `pages/`, pubblicata dal workflow `.github/workflows/enable-banking-pages.yml`
+  (una tantum: *Settings → Pages → Source: GitHub Actions*).
+- **Senza pagina**: con Redirect URL `https://localhost:8787/...` e connettore spento il
+  browser mostra un errore di connessione; copia l'indirizzo dalla barra e lancia
+  `npm run cli -- callback "<indirizzo copiato>"`.
 - **Con il server in https**: `npm run cert` genera un certificato per localhost in `keys/`
   (serve openssl, oppure usa [mkcert](https://github.com/FiloSottile/mkcert) per evitare
   l'avviso del browser), imposta `TLS_CERT_PATH`/`TLS_KEY_PATH` e avvia `npm start`.
