@@ -40,7 +40,7 @@ npm run cli -- check      # verifica che app id e chiave funzionino
 | `ENABLE_BANKING_REDIRECT_URL` | sì | Deve coincidere con quella registrata e puntare a `/api/banks/callback` |
 | `ENABLE_BANKING_CONSENT_DAYS` | no | Durata consenso richiesto (default 90; molte banche accettano fino a 180) |
 | `INITIAL_HISTORY_DAYS` | no | Storico movimenti alla prima sync (default 90) |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | no | Push verso il database Supabase del cruscotto (RPC `SUPABASE_SYNC_RPC`, default `yrols_bank_sync`) |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | no | Push verso il database Supabase del cruscotto (funzione `SUPABASE_SCHEMA`.`SUPABASE_SYNC_RPC`, default `yrols.yrols_bank_sync`; lo schema va aggiunto agli *Exposed schemas* dell'API) |
 | `YROLS_URL` / `YROLS_INGEST_TOKEN` | no | In alternativa, push verso un server Yrols (`POST /api/banks/sync`) |
 | `EB_STATE` | no | Sessioni in JSON al posto di `DATA_FILE` (usato in GitHub Actions) |
 | `SYNC_INTERVAL_MINUTES` | no | Sync automatica (default 360 = 4 al giorno, il limite PSD2 di accessi non presidiati per conto); 0 la disattiva |

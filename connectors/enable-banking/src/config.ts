@@ -51,8 +51,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfi
   let pushTarget: string | undefined;
   if (supabaseUrl && supabaseKey) {
     const rpc = env.SUPABASE_SYNC_RPC || "yrols_bank_sync";
-    push = (payload) => pushToSupabase(payload, { url: supabaseUrl, serviceKey: supabaseKey, rpc });
-    pushTarget = `Supabase (${new URL(supabaseUrl).host}, rpc ${rpc})`;
+    const schema = env.SUPABASE_SCHEMA || "yrols";
+    push = (payload) => pushToSupabase(payload, { url: supabaseUrl, serviceKey: supabaseKey, rpc, schema });
+    pushTarget = `Supabase (${new URL(supabaseUrl).host}, ${schema}.${rpc})`;
   } else if (yrolsUrl && ingestToken) {
     push = { yrolsUrl, ingestToken };
     pushTarget = yrolsUrl;
