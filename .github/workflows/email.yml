@@ -1,0 +1,36 @@
+# Legge la casella email ogni ora e propone bollette/scadenze nel cruscotto online.
+# Secret richiesti: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, YROLS_IMAP_HOST, YROLS_IMAP_USER, YROLS_IMAP_PASSWORD.
+# Il repo è pubblico e i log anche: lo script stampa solo conteggi.
+name: Lettura email
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: email-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run email:cloud -w apps/server
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          YROLS_IMAP_HOST: ${{ secrets.YROLS_IMAP_HOST }}
+          YROLS_IMAP_USER: ${{ secrets.YROLS_IMAP_USER }}
+          YROLS_IMAP_PASSWORD: ${{ secrets.YROLS_IMAP_PASSWORD }}
+          YROLS_IMAP_SINCE_DAYS: "30"

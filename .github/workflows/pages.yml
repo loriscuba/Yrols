@@ -1,0 +1,54 @@
+# Pubblica su GitHub Pages:
+#   https://loriscuba.github.io/Yrols/           → cruscotto (con login Supabase)
+#   https://loriscuba.github.io/Yrols/callback/  → pagina di ritorno del consenso Enable Banking
+# Richiede: Settings → Pages → Source = "GitHub Actions" e le variabili di repository
+# YROLS_SUPABASE_URL e YROLS_SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions → Variables).
+# La chiave "anon" è pensata per stare nel browser: i dati sono protetti dalle regole del database.
+name: Cruscotto su GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/web/**", "connectors/enable-banking/pages/**", "package-lock.json", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build cruscotto
+        run: npm run build -w apps/web
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_SUPABASE_URL: ${{ vars.YROLS_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.YROLS_SUPABASE_ANON_KEY }}
+      - name: Componi il sito
+        run: |
+          mkdir -p site
+          cp -r apps/web/dist/. site/
+          cp site/index.html site/404.html
+          cp -r connectors/enable-banking/pages/callback site/callback
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

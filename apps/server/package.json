@@ -8,7 +8,8 @@
     "start": "tsx --env-file-if-exists=../../.env src/index.ts",
     "seed": "tsx --env-file-if-exists=../../.env src/seed.ts",
     "test": "tsx --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "email:cloud": "tsx src/emailCloud.ts"
   },
   "dependencies": {
     "express": "^4.21.2",

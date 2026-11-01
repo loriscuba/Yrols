@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./styles.css";
 import { Layout } from "./components/Layout";
+import { AuthGate } from "./components/AuthGate";
 import { OverviewPage } from "./pages/Overview";
 import { BanksPage } from "./pages/Banks";
 import { BillsPage } from "./pages/Bills";
@@ -12,7 +13,8 @@ import { EmailPage } from "./pages/Email";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <AuthGate>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<OverviewPage />} />
@@ -24,5 +26,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         </Route>
       </Routes>
     </BrowserRouter>
+    </AuthGate>
   </React.StrictMode>,
 );

@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Bell, CalendarClock, Home, Landmark, Mail, ReceiptText, Moon, Sun } from "lucide-react";
+import { Bell, CalendarClock, Home, Landmark, LogOut, Mail, ReceiptText, Moon, Sun } from "lucide-react";
+import { supabase } from "../cloud";
 import { useEffect, useState } from "react";
 
 const NAV = [
@@ -37,6 +38,11 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
+        {supabase && (
+          <button className="theme-btn" onClick={() => supabase!.auth.signOut()} aria-label="Esci">
+            <LogOut size={16} /><span>Esci</span>
+          </button>
+        )}
         <button className="theme-btn" onClick={toggle} aria-label="Cambia tema">
           {dark ? <Sun size={16} /> : <Moon size={16} />}<span>{dark ? "Tema chiaro" : "Tema scuro"}</span>
         </button>

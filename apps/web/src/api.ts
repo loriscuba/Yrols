@@ -1,6 +1,11 @@
+import { cloudEnabled, cloudRequest } from "./cloud";
+
 export class ApiError extends Error {}
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (cloudEnabled) {
+    try { return await cloudRequest<T>(method, path, body); } catch (e) { throw new ApiError((e as Error).message); }
+  }
   const res = await fetch(`/api${path}`, {
     method,
     headers: body !== undefined ? { "content-type": "application/json" } : undefined,
