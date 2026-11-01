@@ -1,0 +1,74 @@
+# Sincronizzazione bancaria automatica (Enable Banking → Supabase), anche a Mac spento.
+# Il repository è pubblico e quindi lo sono anche questi log: il connettore stampa solo conteggi.
+#
+# Secrets richiesti (Settings → Secrets and variables → Actions):
+#   ENABLE_BANKING_APP_ID        Application ID dell'app Enable Banking
+#   ENABLE_BANKING_PRIVATE_KEY   contenuto del file .pem
+#   EB_STATE                     output di `npm run cli -- state` (sessioni bancarie)
+#   SUPABASE_URL                 https://<ref>.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY    chiave service_role del progetto Supabase
+name: Sincronizzazione banche
+
+on:
+  schedule:
+    # 4 volte al giorno: il limite PSD2 per gli accessi senza l'utente presente.
+    - cron: "17 5,11,17,23 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Giorni di storico movimenti da scaricare"
+        default: "14"
+
+concurrency:
+  group: bank-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: connectors/enable-banking
+    env:
+      ENABLE_BANKING_APP_ID: ${{ secrets.ENABLE_BANKING_APP_ID }}
+      ENABLE_BANKING_PRIVATE_KEY: ${{ secrets.ENABLE_BANKING_PRIVATE_KEY }}
+      EB_STATE: ${{ secrets.EB_STATE }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Verifica configurazione
+        id: cfg
+        working-directory: .
+        run: |
+          missing=""
+          for v in ENABLE_BANKING_APP_ID ENABLE_BANKING_PRIVATE_KEY EB_STATE SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            [ -z "${!v}" ] && missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::Sincronizzazione saltata, secrets mancanti:$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: connectors/enable-banking/package-lock.json
+      - name: Build
+        if: steps.cfg.outputs.ready == 'true'
+        run: npm ci && npm run build
+      - name: Sync
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          DAYS: ${{ inputs.days || '14' }}
+        run: |
+          case "$DAYS" in ''|*[!0-9]*) echo "days non valido"; exit 1;; esac
+          node dist/src/cli.js sync --days="$DAYS"

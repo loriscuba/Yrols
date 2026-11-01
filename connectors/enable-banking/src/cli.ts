@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
 import { loadConfig } from "./config.js";
-import { buildService } from "./server.js";
+import { buildService, buildStore } from "./server.js";
+import { exportState } from "./store.js";
 
 const HELP = `Uso: npm run cli -- <comando> [argomenti]
 
@@ -14,8 +15,10 @@ const HELP = `Uso: npm run cli -- <comando> [argomenti]
   accounts                      elenca i conti collegati
   balances <accountId>          saldi del conto
   transactions <accountId> [DA] [A]   movimenti (date YYYY-MM-DD)
-  sync [file.json]              sincronizza tutto: push al cruscotto se configurato,
-                                altrimenti salva il payload su file (o stdout)
+  sync [file.json] [--days=N]   sincronizza tutto: push al cruscotto/Supabase se configurato,
+                                altrimenti salva il payload su file (o stdout). --days limita
+                                lo storico movimenti agli ultimi N giorni
+  state                         stampa lo stato delle sessioni da copiare nel secret EB_STATE
   disconnect <connectionId>     revoca un consenso
 `;
 
@@ -59,12 +62,28 @@ async function run(argv: string[]) {
     case "transactions":
       return out(await svc.getTransactions(required(args[0], "accountId"), args[1], args[2]));
     case "sync": {
-      const r = await svc.sync(cfg.push);
+      const daysArg = args.find((a) => a.startsWith("--days="));
+      const file = args.find((a) => !a.startsWith("--"));
+      const from = daysArg ? new Date(Date.now() - Number(daysArg.slice(7)) * 86_400_000).toISOString().slice(0, 10) : undefined;
+      // In CI (es. GitHub Actions su repo pubblico) i log sono pubblici: mai stampare dati bancari.
+      if (process.env.CI && !cfg.push && !file) throw new Error("In CI serve una destinazione (SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY): non stampo i dati nei log");
+      const r = await svc.sync(cfg.push, { from });
       console.error(`Conti: ${r.payload.accounts?.length}, saldi: ${r.payload.balances?.length}, movimenti: ${r.payload.transactions?.length}, errori: ${r.errors.length}`);
-      for (const e of r.errors) console.error(` - ${e.step} ${e.accountId ?? ""}: ${e.message}`);
-      if (r.pushed) return out(r.pushed);
-      if (args[0]) await writeFile(args[0], JSON.stringify(r.payload, null, 2));
+      for (const e of r.errors) console.error(` - ${e.step}: ${e.message}`);
+      if (r.pushed) {
+        console.error(`Inviato: ${cfg.pushTarget}`);
+        if (r.errors.length && r.errors.length >= (r.payload.accounts?.length ?? 0) * 2) process.exitCode = 1;
+        return;
+      }
+      if (file) await writeFile(file, JSON.stringify(r.payload, null, 2), { mode: 0o600 });
       else out(r.payload);
+      return;
+    }
+    case "state": {
+      const data = await buildStore(cfg).load();
+      console.error("Copia la riga seguente nel secret EB_STATE del repository (Settings → Secrets and variables → Actions).");
+      console.error("Contiene gli id di sessione Enable Banking: non incollarla in chat né nei file del repo.");
+      console.log(exportState(data));
       return;
     }
     case "disconnect":

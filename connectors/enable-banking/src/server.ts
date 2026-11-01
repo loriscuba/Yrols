@@ -6,15 +6,15 @@ import { pathToFileURL } from "node:url";
 import { EnableBankingClient, EnableBankingError } from "./client.js";
 import { loadConfig, type ConnectorConfig } from "./config.js";
 import { BankingService, ConnectorError } from "./service.js";
-import { FileStore } from "./store.js";
-import type { PushOptions } from "./push.js";
+import { FileStore, JsonStateStore, type ConnectorStore } from "./store.js";
+import type { Pusher } from "./push.js";
 
 export interface AppOptions {
   service: BankingService;
   apiToken?: string;
   corsOrigin?: string;
   dashboardUrl?: string;
-  push?: PushOptions;
+  push?: Pusher;
   log?: (msg: string) => void;
 }
 
@@ -179,11 +179,16 @@ export function buildService(cfg: ConnectorConfig): BankingService {
   const client = new EnableBankingClient({ applicationId: cfg.applicationId, privateKey: cfg.privateKey, baseUrl: cfg.baseUrl });
   return new BankingService({
     client,
-    store: new FileStore(cfg.dataFile),
+    store: buildStore(cfg),
     redirectUrl: cfg.redirectUrl,
     consentDays: cfg.consentDays,
     initialHistoryDays: cfg.initialHistoryDays,
   });
+}
+
+export function buildStore(cfg: ConnectorConfig): ConnectorStore {
+  // In GitHub Actions le sessioni arrivano dal secret EB_STATE (il disco non persiste tra un'esecuzione e l'altra).
+  return cfg.stateJson ? new JsonStateStore(cfg.stateJson) : new FileStore(cfg.dataFile);
 }
 
 export function main() {
@@ -203,7 +208,7 @@ export function main() {
     : createServer(handler);
   server.listen(cfg.port, cfg.host, () => {
     console.log(`Connettore Enable Banking in ascolto su ${tls ? "https" : "http"}://${cfg.host}:${cfg.port}`);
-    console.log(cfg.push ? `Push verso il cruscotto: ${cfg.push.yrolsUrl}` : "Push verso il cruscotto disattivato (YROLS_URL / YROLS_INGEST_TOKEN)");
+    console.log(cfg.pushTarget ? `Push verso: ${cfg.pushTarget}` : "Push verso il cruscotto disattivato (SUPABASE_URL o YROLS_URL)");
   });
   if (cfg.syncIntervalMinutes > 0 && cfg.push) {
     const run = () =>

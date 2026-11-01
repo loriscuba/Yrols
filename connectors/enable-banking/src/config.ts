@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import type { PushOptions } from "./push.js";
+import type { Pusher } from "./push.js";
+import { pushToSupabase } from "./supabase.js";
 
 export interface ConnectorConfig {
   applicationId: string;
@@ -14,7 +15,11 @@ export interface ConnectorConfig {
   apiToken?: string;
   corsOrigin?: string;
   dashboardUrl?: string;
-  push?: PushOptions;
+  push?: Pusher;
+  /** Descrizione leggibile della destinazione (per i log, senza segreti). */
+  pushTarget?: string;
+  /** Stato delle sessioni in JSON (secret EB_STATE in GitHub Actions). */
+  stateJson?: string;
   /** 0 = disattivata. Default 360 (4 volte al giorno, limite PSD2 per accessi non presidiati). */
   syncIntervalMinutes: number;
   /** Certificato e chiave per servire https (necessario per la redirect di Enable Banking). */
@@ -40,6 +45,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfi
   const port = num(env.PORT, 8787);
   const yrolsUrl = env.YROLS_URL;
   const ingestToken = env.YROLS_INGEST_TOKEN;
+  const supabaseUrl = env.SUPABASE_URL;
+  const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
+  let push: Pusher | undefined;
+  let pushTarget: string | undefined;
+  if (supabaseUrl && supabaseKey) {
+    const rpc = env.SUPABASE_SYNC_RPC || "yrols_bank_sync";
+    push = (payload) => pushToSupabase(payload, { url: supabaseUrl, serviceKey: supabaseKey, rpc });
+    pushTarget = `Supabase (${new URL(supabaseUrl).host}, rpc ${rpc})`;
+  } else if (yrolsUrl && ingestToken) {
+    push = { yrolsUrl, ingestToken };
+    pushTarget = yrolsUrl;
+  }
   return {
     applicationId,
     privateKey,
@@ -53,7 +70,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfi
     apiToken: env.CONNECTOR_API_TOKEN || undefined,
     corsOrigin: env.CORS_ORIGIN || undefined,
     dashboardUrl: env.DASHBOARD_URL || undefined,
-    push: yrolsUrl && ingestToken ? { yrolsUrl, ingestToken } : undefined,
+    push,
+    pushTarget,
+    stateJson: env.EB_STATE || undefined,
     syncIntervalMinutes: num(env.SYNC_INTERVAL_MINUTES, 360),
     tlsCertPath: env.TLS_CERT_PATH || undefined,
     tlsKeyPath: env.TLS_KEY_PATH || undefined,

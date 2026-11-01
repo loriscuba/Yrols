@@ -40,7 +40,9 @@ npm run cli -- check      # verifica che app id e chiave funzionino
 | `ENABLE_BANKING_REDIRECT_URL` | sì | Deve coincidere con quella registrata e puntare a `/api/banks/callback` |
 | `ENABLE_BANKING_CONSENT_DAYS` | no | Durata consenso richiesto (default 90; molte banche accettano fino a 180) |
 | `INITIAL_HISTORY_DAYS` | no | Storico movimenti alla prima sync (default 90) |
-| `YROLS_URL` / `YROLS_INGEST_TOKEN` | no | Abilitano il push verso il cruscotto (token = `YROLS_INGEST_TOKEN` del server Yrols) |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | no | Push verso il database Supabase del cruscotto (RPC `SUPABASE_SYNC_RPC`, default `yrols_bank_sync`) |
+| `YROLS_URL` / `YROLS_INGEST_TOKEN` | no | In alternativa, push verso un server Yrols (`POST /api/banks/sync`) |
+| `EB_STATE` | no | Sessioni in JSON al posto di `DATA_FILE` (usato in GitHub Actions) |
 | `SYNC_INTERVAL_MINUTES` | no | Sync automatica (default 360 = 4 al giorno, il limite PSD2 di accessi non presidiati per conto); 0 la disattiva |
 | `CONNECTOR_API_TOKEN` | consigliata | Token Bearer richiesto dalle API del connettore. Senza, il server ascolta solo su 127.0.0.1 |
 | `HOST`, `PORT` | no | Default `127.0.0.1:8787` |
@@ -78,7 +80,32 @@ con `?code=...&state=...`. Il collegamento va completato entro 1 ora dal `connec
 Il consenso PSD2 scade (`validUntil`): il cruscotto lo mostra tra le scadenze
 14 giorni prima. Per rinnovarlo basta ripetere `connect`.
 
-## 4. API HTTP
+## 4. Sincronizzazione automatica con GitHub Actions (Mac spento)
+
+Il workflow `.github/workflows/bank-sync.yml` scarica saldi e movimenti 4 volte al
+giorno sui server di GitHub e li invia al database Supabase del cruscotto, chiamando
+la funzione `yrols_bank_sync(payload jsonb)` con il JSON del contratto.
+
+Una tantum, in *Settings → Secrets and variables → Actions → New repository secret*:
+
+| Secret | Valore |
+|---|---|
+| `ENABLE_BANKING_APP_ID` | Application ID |
+| `ENABLE_BANKING_PRIVATE_KEY` | tutto il contenuto del file `.pem` |
+| `EB_STATE` | l'output di `npm run cli -- state` lanciato sul Mac dopo aver collegato la banca |
+| `SUPABASE_URL` | `https://<ref>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | chiave *service_role* (Supabase → Project Settings → API) |
+
+Poi *Actions → Sincronizzazione banche → Run workflow* con `days` = 90 per caricare lo storico.
+Finché manca un secret il workflow si limita a un avviso.
+
+Quando rinnovi il consenso (ogni 90 giorni) o colleghi un'altra banca, rifai
+`connect` + `callback` sul Mac e aggiorna il secret `EB_STATE` con il nuovo `state`.
+
+Il repository è pubblico, e con lui i log di Actions: il connettore in CI stampa solo
+conteggi e rifiuta di stampare dati se non ha una destinazione configurata.
+
+## 5. API HTTP
 
 Tutte le rotte (tranne `/health` e `/api/banks/callback`) richiedono
 `Authorization: Bearer <CONNECTOR_API_TOKEN>` se il token è impostato.
@@ -99,7 +126,7 @@ Tutte le rotte (tranne `/health` e `/api/banks/callback`) richiedono
 Le letture in tempo reale consumano gli accessi PSD2 giornalieri: per il cruscotto
 conviene leggere dal database di Yrols, alimentato dalla sync.
 
-## 5. Formato dati
+## 6. Formato dati
 
 Definito in `src/types.ts` e nel contratto condiviso con il cruscotto
 (`contratto-dati-banche.md`):
@@ -117,7 +144,7 @@ La sync è **incrementale**: la prima volta scarica `INITIAL_HISTORY_DAYS` giorn
 poi riparte da 7 giorni prima dell'ultima sync (per i movimenti contabilizzati in
 ritardo); il cruscotto fa upsert per `id`, quindi i duplicati non sono un problema.
 
-## 6. Uso come libreria
+## 7. Uso come libreria
 
 ```ts
 import { EnableBankingClient, BankingService, FileStore } from "@yrols/enable-banking-connector";
