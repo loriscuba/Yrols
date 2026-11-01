@@ -3,12 +3,12 @@
  * Traduce le stesse richieste "/api/..." usate dalle pagine in query Supabase, così le pagine non cambiano.
  * La sicurezza è nel database (RLS): la chiave "anon" pubblicata nella pagina non dà accesso ai dati.
  */
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 export const cloudEnabled = !!(URL_ && KEY);
-export const supabase: SupabaseClient | null = cloudEnabled ? createClient(URL_!, KEY!) : null;
+export const supabase = cloudEnabled ? createClient(URL_!, KEY!, { db: { schema: "yrols" } }) : null;
 
 const META = {
   billKinds: ["luce", "gas", "acqua", "internet", "telefono", "rifiuti", "condominio", "affitto", "mutuo", "altro"],

@@ -37,22 +37,22 @@ I dati stanno in un file SQLite (`data/yrols.db`, configurabile con `YROLS_DB`).
 Per usarlo anche a computer spento il cruscotto gira online, senza server:
 
 - **Interfaccia** su GitHub Pages: `https://loriscuba.github.io/Yrols/`, con login.
-- **Dati** in un database Supabase privato (`supabase/migrations/`). Il repository è pubblico,
+- **Dati** nello schema `yrols` del progetto Supabase *Demo IPA* (`supabase/migrations/`). Il repository è pubblico,
   quindi nessun dato e nessuna chiave segreta stanno nel repo: l'accesso è protetto dalle regole
   del database (RLS) e solo il **primo account creato** diventa proprietario.
-- **Banche**: una GitHub Action del connettore chiama la funzione `yrols_bank_sync` ogni 6 ore.
+- **Banche**: una GitHub Action del connettore chiama `yrols.yrols_bank_sync` ogni 6 ore (header `Content-Profile: yrols`).
 - **Email**: `.github/workflows/email.yml` legge la posta ogni ora.
 
 Configurazione, una volta sola:
 
-1. Applica la migrazione al progetto Supabase (`supabase db push` o SQL editor).
+1. Applica la migrazione al progetto Supabase e aggiungi `yrols` agli *Exposed schemas* (Settings → Data API).
 2. In Supabase → Authentication → URL Configuration imposta *Site URL* = `https://loriscuba.github.io/Yrols/`.
 3. Su GitHub → Settings → Secrets and variables → Actions:
-   - **Variables**: `YROLS_SUPABASE_URL`, `YROLS_SUPABASE_ANON_KEY` (la chiave pubblica "anon")
    - **Secrets**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, e per la posta `YROLS_IMAP_HOST`, `YROLS_IMAP_USER`, `YROLS_IMAP_PASSWORD`
 4. Settings → Pages → Source = *GitHub Actions*, poi lancia il workflow *Cruscotto su GitHub Pages*.
-5. Apri il sito, scegli *Crea l'account* e conferma l'email: sei il proprietario. Poi in
-   Supabase → Authentication → Sign In / Providers disattiva *Allow new users to sign up*.
+5. Inserisci il tuo utente in `yrols.yrols_members` (se la tabella è vuota, il primo account che
+   accede diventa proprietario). Il progetto è condiviso con altre app: gli altri utenti possono
+   fare login ma non vedono nessun dato di Yrols.
 
 I log delle Actions di un repo pubblico sono pubblici: gli script stampano solo conteggi.
 

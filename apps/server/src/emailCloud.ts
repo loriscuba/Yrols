@@ -12,7 +12,8 @@ const cfg = imapConfigFromEnv();
 if (!url || !key) { console.log("Supabase non configurato (secret SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY): niente da fare."); process.exit(0); }
 if (!cfg) { console.log("Casella email non configurata (secret YROLS_IMAP_*): niente da fare."); process.exit(0); }
 
-const headers = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+// Le tabelle stanno nello schema "yrols" del progetto Supabase.
+const headers = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", "Accept-Profile": "yrols", "Content-Profile": "yrols" };
 async function rest(path: string, init: RequestInit = {}) {
   const res = await fetch(`${url}/rest/v1/${path}`, { ...init, headers: { ...headers, ...(init.headers ?? {}) } });
   if (!res.ok) throw new Error(`Supabase ${res.status} su ${path.split("?")[0]}`);
