@@ -57,3 +57,27 @@ export class FileStore implements ConnectorStore {
     await rename(tmp, this.path);
   }
 }
+
+/**
+ * Stato letto da una stringa JSON (es. secret EB_STATE in GitHub Actions).
+ * Le modifiche restano in memoria per la durata del processo: per rinnovare un
+ * consenso si collega la banca in locale e si aggiorna il secret con `cli state`.
+ */
+export class JsonStateStore implements ConnectorStore {
+  private data: StoreData;
+  constructor(json: string) {
+    const parsed = JSON.parse(json) as Partial<StoreData>;
+    this.data = { pending: [], connections: parsed.connections ?? [], lastSyncAt: parsed.lastSyncAt };
+  }
+  async load() {
+    return structuredClone(this.data);
+  }
+  async save(data: StoreData) {
+    this.data = structuredClone(data);
+  }
+}
+
+/** Versione esportabile dello stato: solo le connessioni, senza consensi in sospeso. */
+export function exportState(data: StoreData): string {
+  return JSON.stringify({ connections: data.connections });
+}

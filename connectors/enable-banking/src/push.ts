@@ -32,3 +32,10 @@ export async function pushToYrols(payload: SyncPayload, opts: PushOptions): Prom
   if (!res.ok) throw new Error(`Push verso Yrols fallito (${res.status}): ${text.slice(0, 300)}`);
   return text ? (JSON.parse(text) as PushResult) : { ok: true };
 }
+
+/** Destinazione dei dati: il server del cruscotto (PushOptions) o una funzione qualsiasi (es. Supabase). */
+export type Pusher = PushOptions | ((payload: SyncPayload) => Promise<PushResult>);
+
+export function runPush(payload: SyncPayload, push: Pusher): Promise<PushResult> {
+  return typeof push === "function" ? push(payload) : pushToYrols(payload, push);
+}

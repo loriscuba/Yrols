@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { EnableBankingClient, EnableBankingError } from "./client.js";
 import { normalizeAccount, normalizeBalance, normalizeTransaction } from "./normalize.js";
-import { pushToYrols, type PushOptions, type PushResult } from "./push.js";
+import { runPush, type Pusher, type PushResult } from "./push.js";
 import type { ConnectorStore, StoredConnection } from "./store.js";
 import type { Account, Balance, Connection, SyncPayload, Transaction } from "./types.js";
 
@@ -208,10 +208,10 @@ export class BankingService {
   }
 
   /** Sincronizza e, se configurato, invia i dati al cruscotto. */
-  async sync(push?: PushOptions, opts: { from?: string } = {}): Promise<SyncResult> {
+  async sync(push?: Pusher, opts: { from?: string } = {}): Promise<SyncResult> {
     const { payload, errors } = await this.buildSyncPayload(opts);
     let pushed: PushResult | undefined;
-    if (push) pushed = await pushToYrols(payload, push);
+    if (push) pushed = await runPush(payload, push);
     // Avanza lastSyncAt solo se almeno una parte è andata a buon fine.
     const attempted = (payload.accounts?.length ?? 0) * 2;
     if (attempted === 0 || errors.length < attempted) {
