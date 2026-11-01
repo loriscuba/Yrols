@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Yrols · Collegamento banca</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --fg:#1b1f24; --muted:#5b6470; --accent:#0b6bcb; --ok:#1a7f37; --err:#b42318; --border:#dde1e6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#101317; --card:#181c21; --fg:#e8ebee; --muted:#9aa4af; --accent:#4c9bf0; --ok:#3fb950; --err:#f47067; --border:#2b3138; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:40rem; margin:0 auto; padding:2.5rem 1rem; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; }
+  h1 { font-size:1.35rem; margin:0 0 .5rem; }
+  p { margin:.5rem 0; color:var(--muted); }
+  .ok { color:var(--ok); } .err { color:var(--err); }
+  code, textarea { font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  textarea { width:100%; min-height:6.5rem; margin:.75rem 0; padding:.6rem; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--fg); resize:vertical; word-break:break-all; }
+  .row { display:flex; flex-wrap:wrap; gap:.5rem; }
+  button, a.btn { appearance:none; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:8px; padding:.55rem .9rem; font:inherit; cursor:pointer; text-decoration:none; }
+  a.btn.secondary { background:transparent; color:var(--accent); }
+  ol { padding-left:1.2rem; color:var(--muted); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1 id="title">Collegamento banca</h1>
+    <p id="msg">Lettura della risposta della banca…</p>
+
+    <section id="success" hidden>
+      <p>Completa il collegamento sul computer dove gira il connettore Yrols. Questo comando va lanciato entro un'ora dall'avvio del collegamento:</p>
+      <textarea id="cmd" readonly></textarea>
+      <div class="row">
+        <button id="copy" type="button">Copia comando</button>
+        <a id="local" class="btn secondary" href="#">Invia al connettore locale</a>
+      </div>
+      <ol>
+        <li>Apri un terminale nella cartella <code>connectors/enable-banking</code>.</li>
+        <li>Incolla il comando e premi Invio.</li>
+        <li>In alternativa, se il connettore è avviato con <code>npm start</code> su questo computer, usa "Invia al connettore locale".</li>
+      </ol>
+      <p>Il codice è monouso e senza la chiave privata del connettore non dà accesso ai conti. Questa pagina non lo invia da nessuna parte.</p>
+    </section>
+  </div>
+</main>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var title = document.getElementById("title");
+  var msg = document.getElementById("msg");
+  var code = q.get("code"), state = q.get("state"), error = q.get("error");
+  if (error) {
+    title.textContent = "Collegamento non riuscito";
+    title.className = "err";
+    msg.textContent = "La banca ha risposto: " + (q.get("error_description") || error) + ". Riprova con il comando connect.";
+    return;
+  }
+  if (!code || !state) {
+    msg.textContent = "Nessun codice di autorizzazione nell'indirizzo. Questa pagina si apre automaticamente alla fine del consenso bancario.";
+    return;
+  }
+  title.textContent = "Consenso bancario concesso";
+  title.className = "ok";
+  msg.textContent = "Manca un ultimo passo.";
+  var cmd = 'npm run cli -- callback "' + location.href.replace(/"/g, "%22") + '"';
+  document.getElementById("cmd").value = cmd;
+  document.getElementById("local").href = "https://localhost:8787/api/banks/callback" + location.search;
+  document.getElementById("success").hidden = false;
+  document.getElementById("copy").addEventListener("click", function () {
+    var btn = this;
+    var done = function () { btn.textContent = "Copiato"; setTimeout(function () { btn.textContent = "Copia comando"; }, 2000); };
+    if (navigator.clipboard) navigator.clipboard.writeText(cmd).then(done, function () { select(); });
+    else select();
+    function select() { var t = document.getElementById("cmd"); t.focus(); t.select(); document.execCommand("copy"); done(); }
+  });
+})();
+</script>
+</body>
+</html>
