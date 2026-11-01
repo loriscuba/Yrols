@@ -17,6 +17,9 @@ export interface ConnectorConfig {
   push?: PushOptions;
   /** 0 = disattivata. Default 360 (4 volte al giorno, limite PSD2 per accessi non presidiati). */
   syncIntervalMinutes: number;
+  /** Certificato e chiave per servire https (necessario per la redirect di Enable Banking). */
+  tlsCertPath?: string;
+  tlsKeyPath?: string;
 }
 
 const num = (v: string | undefined, def: number) => (v && Number.isFinite(Number(v)) ? Number(v) : def);
@@ -41,7 +44,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfi
     applicationId,
     privateKey,
     baseUrl: env.ENABLE_BANKING_BASE_URL || "https://api.enablebanking.com",
-    redirectUrl: env.ENABLE_BANKING_REDIRECT_URL || `http://localhost:${port}/api/banks/callback`,
+    redirectUrl: env.ENABLE_BANKING_REDIRECT_URL || `https://localhost:${port}/api/banks/callback`,
     consentDays: num(env.ENABLE_BANKING_CONSENT_DAYS, 90),
     initialHistoryDays: num(env.INITIAL_HISTORY_DAYS, 90),
     host: env.HOST || "127.0.0.1",
@@ -52,5 +55,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfi
     dashboardUrl: env.DASHBOARD_URL || undefined,
     push: yrolsUrl && ingestToken ? { yrolsUrl, ingestToken } : undefined,
     syncIntervalMinutes: num(env.SYNC_INTERVAL_MINUTES, 360),
+    tlsCertPath: env.TLS_CERT_PATH || undefined,
+    tlsKeyPath: env.TLS_KEY_PATH || undefined,
   };
 }

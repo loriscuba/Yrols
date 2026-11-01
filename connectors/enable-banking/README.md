@@ -15,8 +15,8 @@ normalizzato del cruscotto e li invia a `POST {YROLS_URL}/api/banks/sync`.
 2. Crea un'applicazione (*Applications → Register new application*):
    - ambiente **Sandbox** per le prove con banche finte, **Production** per i tuoi conti reali
      (per uso personale l'app di produzione si attiva collegando i propri conti, senza contratto commerciale);
-   - **Redirect URL**: `http://localhost:8787/api/banks/callback`
-     (o l'indirizzo pubblico del connettore, se lo esponi);
+   - **Redirect URL**: `https://localhost:8787/api/banks/callback`
+     (Enable Banking accetta solo indirizzi **https**; vedi il punto 3 per come gestirlo in locale);
    - lascia che il pannello generi la coppia di chiavi: scarica il file `.pem` della **chiave privata**.
 3. Annota l'**Application ID** (è il `kid` del JWT).
 4. Metti la chiave in `connectors/enable-banking/keys/enable-banking.pem`
@@ -43,21 +43,30 @@ npm run cli -- check      # verifica che app id e chiave funzionino
 | `SYNC_INTERVAL_MINUTES` | no | Sync automatica (default 360 = 4 al giorno, il limite PSD2 di accessi non presidiati per conto); 0 la disattiva |
 | `CONNECTOR_API_TOKEN` | consigliata | Token Bearer richiesto dalle API del connettore. Senza, il server ascolta solo su 127.0.0.1 |
 | `HOST`, `PORT` | no | Default `127.0.0.1:8787` |
+| `TLS_CERT_PATH`, `TLS_KEY_PATH` | no | Se impostati il server parla https (`npm run cert` li genera) |
 | `DATA_FILE` | no | Dove salvare le sessioni (default `./data/enable-banking.json`) |
 | `CORS_ORIGIN`, `DASHBOARD_URL` | no | Origine del cruscotto e pagina su cui tornare dopo il consenso |
 
 ## 3. Collegare una banca
 
 ```bash
-npm start                                   # avvia il server del connettore
+npm start                                   # opzionale: server del connettore (vedi sotto)
 npm run cli -- banks IT                     # nome esatto della banca
 npm run cli -- connect "Intesa Sanpaolo" IT # stampa il link per il consenso
 ```
 
-Apri il link, autenticati sulla banca: verrai rimandato su `/api/banks/callback`,
-che salva la sessione, lancia la prima sincronizzazione e ti riporta al cruscotto
-(`DASHBOARD_URL?bank=connected`). Lo stesso flusso è disponibile via API per il
-pulsante "Collega banca" del cruscotto.
+Apri il link e autenticati sulla banca: la banca ti rimanda sulla Redirect URL
+(`https://localhost:8787/api/banks/callback?code=...&state=...`). Due modi per completare:
+
+- **Senza certificato (il più semplice)**: il browser mostrerà un errore di connessione,
+  è normale. Copia l'indirizzo completo dalla barra del browser e lancia
+  `npm run cli -- callback "<indirizzo copiato>"`. Il consenso è valido per 1 ora dall'avvio.
+- **Con il server in https**: `npm run cert` genera un certificato per localhost in `keys/`
+  (serve openssl, oppure usa [mkcert](https://github.com/FiloSottile/mkcert) per evitare
+  l'avviso del browser), imposta `TLS_CERT_PATH`/`TLS_KEY_PATH` e avvia `npm start`.
+  Il callback salva la sessione, lancia la prima sincronizzazione e ti riporta al
+  cruscotto (`DASHBOARD_URL?bank=connected`). Così funziona anche il pulsante
+  "Collega banca" del cruscotto.
 
 Il consenso PSD2 scade (`validUntil`): il cruscotto lo mostra tra le scadenze
 14 giorni prima. Per rinnovarlo basta ripetere `connect`.

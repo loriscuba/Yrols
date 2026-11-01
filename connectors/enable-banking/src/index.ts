@@ -6,4 +6,4 @@ export { BankingService, ConnectorError, type SyncResult, type SyncError } from 
 export { FileStore, MemoryStore, type ConnectorStore, type StoreData } from "./store.js";
 export { pushToYrols, type PushOptions } from "./push.js";
 export { loadConfig, type ConnectorConfig } from "./config.js";
-export { createApp, buildService } from "./server.js";
+export { createApp, createHandler, buildService } from "./server.js";

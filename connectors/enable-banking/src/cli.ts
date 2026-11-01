@@ -8,6 +8,8 @@ const HELP = `Uso: npm run cli -- <comando> [argomenti]
   check                         verifica credenziali (GET /application)
   banks [PAESE]                 elenca le banche disponibili (default IT)
   connect "<Banca>" [PAESE]     avvia il consenso e stampa l'URL da aprire
+  callback "<URL>"              completa il consenso incollando l'indirizzo su cui
+                                la banca ti ha rimandato (anche se la pagina non si apre)
   connections                   elenca i consensi salvati e la scadenza
   accounts                      elenca i conti collegati
   balances <accountId>          saldi del conto
@@ -36,8 +38,17 @@ async function run(argv: string[]) {
       if (!args[0]) throw new Error('Specifica la banca, es: connect "Intesa Sanpaolo" IT');
       const { url } = await svc.startConnection(args[0], args[1] ?? "IT");
       console.log(`Apri questo link e completa l'accesso alla banca:\n${url}\n`);
-      console.log(`Al termine la banca ti rimanda su ${cfg.redirectUrl}: il server del connettore (npm start) deve essere attivo.`);
+      console.log(`Al termine la banca ti rimanda su ${cfg.redirectUrl}.`);
+      console.log(`Se il server del connettore non è attivo la pagina darà errore: copia l'indirizzo dalla barra del browser e lancia\n  npm run cli -- callback "<indirizzo>"`);
       return;
+    }
+    case "callback": {
+      const u = new URL(required(args[0], "URL di ritorno"));
+      const err = u.searchParams.get("error");
+      if (err) throw new Error(`La banca ha rifiutato il consenso: ${u.searchParams.get("error_description") ?? err}`);
+      const conn = await svc.completeConnection(u.searchParams.get("code") ?? "", u.searchParams.get("state") ?? "");
+      console.log(`Banca collegata: ${conn.bankName}, ${conn.accounts.length} conti, consenso valido fino al ${conn.validUntil}`);
+      return out(conn.accounts);
     }
     case "connections":
       return out(await svc.listConnections());

@@ -1,4 +1,6 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { EnableBankingClient, EnableBankingError } from "./client.js";
@@ -56,10 +58,14 @@ function withQuery(base: string, params: Record<string, string>): string {
 }
 
 export function createApp(opts: AppOptions): Server {
+  return createServer(createHandler(opts));
+}
+
+export function createHandler(opts: AppOptions): RequestListener {
   const { service } = opts;
   const log = opts.log ?? ((m: string) => console.log(m));
 
-  return createServer(async (req, res) => {
+  return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const method = req.method ?? "GET";
@@ -166,7 +172,7 @@ export function createApp(opts: AppOptions): Server {
       log(`[errore] ${(err as Error).stack ?? err}`);
       return send(res, 500, { error: "Errore interno" });
     }
-  });
+  };
 }
 
 export function buildService(cfg: ConnectorConfig): BankingService {
@@ -189,9 +195,14 @@ export function main() {
       throw new Error("Rifiuto di esporre il connettore su una rete senza CONNECTOR_API_TOKEN");
     }
   }
-  const server = createApp({ service, apiToken: cfg.apiToken, corsOrigin: cfg.corsOrigin, dashboardUrl: cfg.dashboardUrl, push: cfg.push });
+  const handler = createHandler({ service, apiToken: cfg.apiToken, corsOrigin: cfg.corsOrigin, dashboardUrl: cfg.dashboardUrl, push: cfg.push });
+  // Enable Banking accetta solo redirect https: con TLS_CERT_PATH/TLS_KEY_PATH il server parla https.
+  const tls = cfg.tlsCertPath && cfg.tlsKeyPath;
+  const server = tls
+    ? createHttpsServer({ cert: readFileSync(cfg.tlsCertPath!), key: readFileSync(cfg.tlsKeyPath!) }, handler)
+    : createServer(handler);
   server.listen(cfg.port, cfg.host, () => {
-    console.log(`Connettore Enable Banking in ascolto su http://${cfg.host}:${cfg.port}`);
+    console.log(`Connettore Enable Banking in ascolto su ${tls ? "https" : "http"}://${cfg.host}:${cfg.port}`);
     console.log(cfg.push ? `Push verso il cruscotto: ${cfg.push.yrolsUrl}` : "Push verso il cruscotto disattivato (YROLS_URL / YROLS_INGEST_TOKEN)");
   });
   if (cfg.syncIntervalMinutes > 0 && cfg.push) {
