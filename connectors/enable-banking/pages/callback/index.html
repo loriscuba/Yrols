@@ -54,6 +54,17 @@
   var title = document.getElementById("title");
   var msg = document.getElementById("msg");
   var code = q.get("code"), state = q.get("state"), error = q.get("error");
+  // Flusso dall'app: il cruscotto (pagina Banche) completa il collegamento con la Edge Function.
+  // Con ?manual=1 resta il vecchio flusso da terminale (comando "callback" del connettore).
+  if (state && (code || error) && q.get("manual") !== "1") {
+    var target = new URL("../banche", location.href);
+    target.searchParams.set("eb_state", state);
+    if (code) target.searchParams.set("eb_code", code);
+    if (error) target.searchParams.set("eb_error", error);
+    if (q.get("error_description")) target.searchParams.set("eb_error_description", q.get("error_description"));
+    location.replace(target.toString());
+    return;
+  }
   if (error) {
     title.textContent = "Collegamento non riuscito";
     title.className = "err";
@@ -67,7 +78,8 @@
   title.textContent = "Consenso bancario concesso";
   title.className = "ok";
   msg.textContent = "Manca un ultimo passo.";
-  var cmd = 'npm run cli -- callback "' + location.href.replace(/"/g, "%22") + '"';
+  var plain = new URL(location.href); plain.searchParams.delete("manual");
+  var cmd = 'npm run cli -- callback "' + plain.toString().replace(/"/g, "%22") + '"';
   document.getElementById("cmd").value = cmd;
   document.getElementById("local").href = "https://localhost:8787/api/banks/callback" + location.search;
   document.getElementById("success").hidden = false;

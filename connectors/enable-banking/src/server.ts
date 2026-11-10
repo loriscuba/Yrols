@@ -7,6 +7,7 @@ import { EnableBankingClient, EnableBankingError } from "./client.js";
 import { loadConfig, type ConnectorConfig } from "./config.js";
 import { BankingService, ConnectorError } from "./service.js";
 import { FileStore, JsonStateStore, type ConnectorStore } from "./store.js";
+import { SupabaseStore } from "./supabase.js";
 import type { Pusher } from "./push.js";
 
 export interface AppOptions {
@@ -187,8 +188,10 @@ export function buildService(cfg: ConnectorConfig): BankingService {
 }
 
 export function buildStore(cfg: ConnectorConfig): ConnectorStore {
-  // In GitHub Actions le sessioni arrivano dal secret EB_STATE (il disco non persiste tra un'esecuzione e l'altra).
-  return cfg.stateJson ? new JsonStateStore(cfg.stateJson) : new FileStore(cfg.dataFile);
+  // Ordine: EB_STATE esplicito (vecchio metodo), poi il database del cruscotto, poi il file locale.
+  if (cfg.stateJson) return new JsonStateStore(cfg.stateJson);
+  if (cfg.supabaseStore) return new SupabaseStore(cfg.supabaseStore);
+  return new FileStore(cfg.dataFile);
 }
 
 export function main() {

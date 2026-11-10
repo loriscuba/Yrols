@@ -42,7 +42,8 @@ npm run cli -- check      # verifica che app id e chiave funzionino
 | `INITIAL_HISTORY_DAYS` | no | Storico movimenti alla prima sync (default 90) |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | no | Push verso il database Supabase del cruscotto (funzione `SUPABASE_SCHEMA`.`SUPABASE_SYNC_RPC`, default `yrols.yrols_bank_sync`; lo schema va aggiunto agli *Exposed schemas* dell'API) |
 | `YROLS_URL` / `YROLS_INGEST_TOKEN` | no | In alternativa, push verso un server Yrols (`POST /api/banks/sync`) |
-| `EB_STATE` | no | Sessioni in JSON al posto di `DATA_FILE` (usato in GitHub Actions) |
+| `EB_STATE` | no | Sessioni in JSON al posto di `DATA_FILE` (vecchio metodo, ha la precedenza) |
+| `CONNECTIONS_SOURCE` | no | Con Supabase configurato le banche si leggono dal database (`bank_connections`/`bank_accounts`); `file` forza `DATA_FILE` |
 | `SYNC_INTERVAL_MINUTES` | no | Sync automatica (default 360 = 4 al giorno, il limite PSD2 di accessi non presidiati per conto); 0 la disattiva |
 | `CONNECTOR_API_TOKEN` | consigliata | Token Bearer richiesto dalle API del connettore. Senza, il server ascolta solo su 127.0.0.1 |
 | `HOST`, `PORT` | no | Default `127.0.0.1:8787` |
@@ -92,15 +93,26 @@ Una tantum, in *Settings → Secrets and variables → Actions → New repositor
 |---|---|
 | `ENABLE_BANKING_APP_ID` | Application ID |
 | `ENABLE_BANKING_PRIVATE_KEY` | tutto il contenuto del file `.pem` |
-| `EB_STATE` | l'output di `npm run cli -- state` lanciato sul Mac dopo aver collegato la banca |
 | `SUPABASE_URL` | `https://<ref>.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | chiave *service_role* (Supabase → Project Settings → API) |
 
 Poi *Actions → Sincronizzazione banche → Run workflow* con `days` = 90 per caricare lo storico.
 Finché manca un secret il workflow si limita a un avviso.
 
-Quando rinnovi il consenso (ogni 90 giorni) o colleghi un'altra banca, rifai
-`connect` + `callback` sul Mac e aggiorna il secret `EB_STATE` con il nuovo `state`.
+Le banche collegate si leggono dal database: non serve più nessun secret con le sessioni.
+
+## 4b. Collegare e rinnovare le banche dall'app
+
+L'Edge Function Supabase `yrols-bank-auth` (`supabase/functions/`) firma le chiamate a
+Enable Banking al posto del Mac. Dal cruscotto (pagina Banche) "Collega banca" o "Rinnova"
+apre la banca; al ritorno la pagina `callback/` rimanda a `/Yrols/banche?eb_state=…&eb_code=…`
+e il cruscotto completa il collegamento: la connessione e i conti finiscono nel database
+(gli id dei conti restano quelli storici, quindi niente doppioni) e parte subito la prima
+sincronizzazione. Le vecchie connessioni della stessa banca vengono chiuse.
+
+Una tantum, in *Supabase → Edge Functions → Secrets*: `EB_APP_ID` (Application ID) e
+`EB_PRIVATE_KEY` (tutto il contenuto del `.pem`). `callback/?manual=1&…` mostra ancora il
+comando per la CLI.
 
 Il repository è pubblico, e con lui i log di Actions: il connettore in CI stampa solo
 conteggi e rifiuta di stampare dati se non ha una destinazione configurata.

@@ -5,6 +5,6 @@ export { normalizeAccount, normalizeBalance, normalizeTransaction, pickPrimaryBa
 export { BankingService, ConnectorError, type SyncResult, type SyncError } from "./service.js";
 export { FileStore, MemoryStore, JsonStateStore, exportState, type ConnectorStore, type StoreData } from "./store.js";
 export { pushToYrols, runPush, type PushOptions, type Pusher } from "./push.js";
-export { pushToSupabase, type SupabasePushOptions } from "./supabase.js";
+export { pushToSupabase, SupabaseStore, type SupabasePushOptions } from "./supabase.js";
 export { loadConfig, type ConnectorConfig } from "./config.js";
 export { createApp, createHandler, buildService, buildStore } from "./server.js";

@@ -137,15 +137,15 @@ export class BankingService {
   }
 
   async getBalances(accountId: string): Promise<Balance[]> {
-    await this.requireAccount(accountId);
-    const res = await this.client.getBalances(accountId);
+    const acc = await this.requireAccount(accountId);
+    const res = await this.client.getBalances(acc.ebUid ?? accountId);
     return (res.balances ?? []).map((b) => normalizeBalance(b, accountId, this.now()));
   }
 
   async getTransactions(accountId: string, from?: string, to?: string): Promise<Transaction[]> {
-    await this.requireAccount(accountId);
+    const acc = await this.requireAccount(accountId);
     const dateFrom = from ?? isoDay(new Date(this.now().getTime() - this.initialHistoryDays * 86_400_000));
-    const raw = await this.client.getAllTransactions(accountId, { dateFrom, dateTo: to });
+    const raw = await this.client.getAllTransactions(acc.ebUid ?? accountId, { dateFrom, dateTo: to });
     return dedupe(raw.map((t) => normalizeTransaction(t, accountId)));
   }
 
@@ -189,15 +189,17 @@ export class BankingService {
     };
     for (const conn of connections.filter((c) => c.status === "active")) {
       for (const acc of conn.accounts) {
-        payload.accounts!.push(acc);
+        const { ebUid, ...publicAcc } = acc;
+        const uid = ebUid ?? acc.id;
+        payload.accounts!.push(publicAcc);
         try {
-          const res = await this.client.getBalances(acc.id);
+          const res = await this.client.getBalances(uid);
           payload.balances!.push(...(res.balances ?? []).map((b) => normalizeBalance(b, acc.id, now)));
         } catch (err) {
           errors.push(toSyncError(err, conn.id, acc.id, "balances"));
         }
         try {
-          const raw = await this.client.getAllTransactions(acc.id, { dateFrom: from });
+          const raw = await this.client.getAllTransactions(uid, { dateFrom: from });
           payload.transactions!.push(...dedupe(raw.map((t) => normalizeTransaction(t, acc.id))));
         } catch (err) {
           errors.push(toSyncError(err, conn.id, acc.id, "transactions"));
