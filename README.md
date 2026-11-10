@@ -41,14 +41,15 @@ Per usarlo anche a computer spento il cruscotto gira online, senza server:
   quindi nessun dato e nessuna chiave segreta stanno nel repo: l'accesso è protetto dalle regole
   del database (RLS) e solo il **primo account creato** diventa proprietario.
 - **Banche**: una GitHub Action del connettore chiama `yrols.yrols_bank_sync` ogni 6 ore (header `Content-Profile: yrols`).
-- **Email**: `.github/workflows/email.yml` legge la posta ogni ora.
+- **Email**: `.github/workflows/email.yml` legge la posta ogni ora. Gmail si collega dalla pagina *Da email*
+  con l'accesso Google in sola lettura (vedi [Collegare la posta](#collegare-la-posta)).
 
 Configurazione, una volta sola:
 
 1. Applica la migrazione al progetto Supabase e aggiungi `yrols` agli *Exposed schemas* (Settings → Data API).
 2. In Supabase → Authentication → URL Configuration imposta *Site URL* = `https://loriscuba.github.io/Yrols/`.
 3. Su GitHub → Settings → Secrets and variables → Actions:
-   - **Secrets**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, e per la posta `YROLS_IMAP_HOST`, `YROLS_IMAP_USER`, `YROLS_IMAP_PASSWORD`
+   - **Secrets**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (e, solo per caselle non Gmail, `YROLS_IMAP_HOST`, `YROLS_IMAP_USER`, `YROLS_IMAP_PASSWORD`)
 4. Settings → Pages → Source = *GitHub Actions*, poi lancia il workflow *Cruscotto su GitHub Pages*.
 5. Inserisci il tuo utente in `yrols.yrols_members` (se la tabella è vuota, il primo account che
    accede diventa proprietario). Il progetto è condiviso con altre app: gli altri utenti possono
@@ -73,7 +74,35 @@ configurato nel connettore). Formato e regole: [docs/contratto-dati-banche.md](d
 
 ## Collegare la posta
 
-Nel file `.env`:
+### Online, con Gmail (consigliato)
+
+Il collegamento usa **Google OAuth in sola lettura** (`gmail.readonly`): Yrols non conosce la
+password, non può inviare né cancellare email, e l'accesso si revoca dalla pagina *Da email*
+(pulsante *Scollega*) o da [myaccount.google.com/connections](https://myaccount.google.com/connections).
+
+Come sono protette le chiavi:
+- il *client secret* Google sta **solo** nei secret della Edge Function `yrols-email-auth` su Supabase;
+- il *refresh token* sta in `yrols.email_accounts`, tabella senza policy (solo `service_role`), e da solo non
+  serve a nulla senza il client secret;
+- la GitHub Action chiede alla Edge Function un access token valido un'ora e nei log stampa solo conteggi.
+
+Configurazione, una volta sola (dal browser):
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → nuovo progetto "Yrols".
+2. *API e servizi → Libreria* → abilita **Gmail API**.
+3. *Google Auth Platform* → *Branding*: nome app "Yrols", la tua email come supporto e contatto.
+   *Audience*: tipo **Esterno**, poi **Pubblica app** (in "Test" Google fa scadere l'accesso ogni 7 giorni).
+   *Data access*: aggiungi lo scope `https://www.googleapis.com/auth/gmail.readonly`.
+4. *Clients* → *Crea client* → **Applicazione web**, URI di reindirizzamento autorizzato:
+   `https://loriscuba.github.io/Yrols/callback/`. Copia ID client e client secret.
+5. Supabase → *Edge Functions → Secrets*: `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`.
+6. Nel cruscotto, pagina *Da email* → **Collega Gmail**. Google mostrerà "app non verificata"
+   (è la tua app personale): *Avanzate → Vai a Yrols*, lascia la spunta di lettura e conferma.
+
+### Altri provider o server locale (IMAP)
+
+Online: secret GitHub `YROLS_IMAP_HOST`, `YROLS_IMAP_USER`, `YROLS_IMAP_PASSWORD` (usati solo se
+nessuna Gmail è collegata). In locale, nel file `.env`:
 
 ```
 YROLS_IMAP_HOST=imap.gmail.com
@@ -82,11 +111,13 @@ YROLS_IMAP_PASSWORD=<password per le app>
 YROLS_IMAP_INTERVAL_MIN=60
 ```
 
-Con Gmail serve una [password per le app](https://myaccount.google.com/apppasswords)
-(richiede la verifica in due passaggi). Il riconoscimento è pensato per i fornitori
+Usa sempre una *password per le app* del provider, mai quella principale: con Gmail
+[si crea qui](https://myaccount.google.com/apppasswords) (richiede la verifica in due passaggi).
+
+Il riconoscimento è pensato per i fornitori
 italiani (Enel, Eni Plenitude, A2A, Hera, Iren, Acea, TIM, Vodafone, WindTre, Iliad,
 Fastweb…) e per scadenze come bollo auto, RC auto, IMU, F24, documenti; le email
-promozionali vengono ignorate. Si può lanciare una lettura a mano dalla pagina *Da email*.
+promozionali vengono ignorate. In locale si può lanciare una lettura a mano dalla pagina *Da email*.
 
 ## Test
 

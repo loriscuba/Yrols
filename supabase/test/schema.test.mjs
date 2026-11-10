@@ -100,3 +100,19 @@ test("proposte da email", async () => {
   assert.ok(r.id);
   await assert.rejects(as("authenticated", LORIS, "select yrols.yrols_accept_suggestion(1)"), /già gestita/);
 });
+
+test("Gmail collegata: token invisibile al cruscotto, stato senza segreti", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  await as("service_role", null, "insert into yrols.email_accounts (email, refresh_token, scope) values ('io@gmail.com', 'segreto', 'gmail.readonly')");
+  await assert.rejects(as("authenticated", LORIS, "select refresh_token from yrols.email_accounts"), /permission denied/);
+  await assert.rejects(as("anon", null, "select * from yrols.email_accounts"));
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.email_auth_pending (state) values ('gm-x')"), /permission denied/);
+  const [{ s }] = await as("authenticated", LORIS, "select yrols.yrols_email_status() s");
+  assert.equal(s.account.email, "io@gmail.com");
+  assert.equal(s.account.status, "active");
+  assert.ok(!JSON.stringify(s).includes("segreto"), "il token non esce mai");
+  const [{ o }] = await as("authenticated", OTHER, "select yrols.yrols_email_status() o");
+  assert.equal(o, null, "un estraneo non vede la casella");
+  await assert.rejects(as("anon", null, "select yrols.yrols_email_status()"));
+});
