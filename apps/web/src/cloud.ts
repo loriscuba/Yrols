@@ -115,7 +115,12 @@ export async function cloudRequest<T>(method: string, fullPath: string, body?: u
 
   if (parts[0] === "email") {
     if (parts[1] === "status") {
-      const r = ok(await sb.rpc("yrols_email_status")) as { account: { email: string; status: string; provider: string } | null; lastScan: unknown } | null;
+      type St = { account: { email: string; status: string; provider: string } | null; lastScan: unknown } | null;
+      const res = await sb.rpc("yrols_email_status");
+      // Se la migrazione Gmail non è ancora applicata, ripiega sull'ultima lettura registrata.
+      const r: St = res.error
+        ? { account: null, lastScan: ok(await sb.from("bank_syncs").select("at:received_at,summary").eq("source", "email").order("id", { ascending: false }).limit(1))?.[0] ?? null }
+        : res.data as St;
       const acc = r?.account ?? null;
       return { configured: !!acc || !!r?.lastScan, cloud: true, user: acc?.email ?? null, host: null, provider: acc?.provider ?? null,
         accountStatus: acc?.status ?? null, lastScan: r?.lastScan ?? null } as T;
