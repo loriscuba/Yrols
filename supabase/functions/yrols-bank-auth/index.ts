@@ -39,7 +39,7 @@ const json = (req: Request, status: number, body: unknown) =>
 async function requireMember(req: Request): Promise<string> {
   const auth = req.headers.get("Authorization") ?? "";
   if (!/^Bearer\s+\S+/.test(auth)) throw new HttpError(401, "Accedi al cruscotto per collegare una banca");
-  const user = createClient(env("SUPABASE_URL"), env("SUPABASE_ANON_KEY"), {
+  const user = createClient(env("SUPABASE_URL"), env("SUPABASE_ANON_KEY") || env("SUPABASE_SERVICE_ROLE_KEY"), {
     global: { headers: { Authorization: auth } },
     db: { schema: "yrols" },
     auth: { persistSession: false },
