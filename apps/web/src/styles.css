@@ -217,3 +217,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .login-card .brand { padding: 0; display: flex; }
 .login-card .btn { justify-content: center; }
 .link-btn { border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 14px; padding: 4px; }
+
+/* Scelta banca */
+.bank-list { max-height: 50vh; overflow-y: auto; margin-top: 4px; }
+.bank-pick { width: 100%; border: 0; background: none; text-align: left; cursor: pointer; font: inherit; color: inherit; margin: 0; }
+.bank-pick:disabled { opacity: 0.6; cursor: default; }
+.bank-logo { width: 32px; height: 32px; object-fit: contain; border-radius: 8px; background: #fff; flex: none; }
+.banner .btn { margin-left: auto; }

@@ -1,10 +1,12 @@
 # Sincronizzazione bancaria automatica (Enable Banking → Supabase), anche a Mac spento.
 # Il repository è pubblico e quindi lo sono anche questi log: il connettore stampa solo conteggi.
 #
+# Le banche collegate si leggono dal database del cruscotto (bank_connections / bank_accounts):
+# si collegano e si rinnovano dall'app, pagina Banche. Il secret EB_STATE non serve più.
+#
 # Secrets richiesti (Settings → Secrets and variables → Actions):
 #   ENABLE_BANKING_APP_ID        Application ID dell'app Enable Banking
 #   ENABLE_BANKING_PRIVATE_KEY   contenuto del file .pem
-#   EB_STATE                     output di `npm run cli -- state` (sessioni bancarie)
 #   SUPABASE_URL                 https://<ref>.supabase.co
 #   SUPABASE_SERVICE_ROLE_KEY    chiave service_role del progetto Supabase
 name: Sincronizzazione banche
@@ -36,7 +38,6 @@ jobs:
     env:
       ENABLE_BANKING_APP_ID: ${{ secrets.ENABLE_BANKING_APP_ID }}
       ENABLE_BANKING_PRIVATE_KEY: ${{ secrets.ENABLE_BANKING_PRIVATE_KEY }}
-      EB_STATE: ${{ secrets.EB_STATE }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
@@ -45,8 +46,8 @@ jobs:
         working-directory: .
         run: |
           missing=""
-          for v in ENABLE_BANKING_APP_ID ENABLE_BANKING_PRIVATE_KEY EB_STATE SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
-            [ -z "${!v}" ] && missing="$missing $v"
+          for v in ENABLE_BANKING_APP_ID ENABLE_BANKING_PRIVATE_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
           done
           if [ -n "$missing" ]; then
             echo "::warning::Sincronizzazione saltata, secrets mancanti:$missing"

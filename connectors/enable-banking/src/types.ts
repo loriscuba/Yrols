@@ -128,6 +128,8 @@ export interface Account {
   currency?: string;
   bankName?: string;
   connectionId?: string;
+  /** uid Enable Banking corrente, se diverso da `id` (il conto ha mantenuto l'id storico dopo un rinnovo). Non inviato al cruscotto. */
+  ebUid?: string;
 }
 
 export interface Balance {
