@@ -81,6 +81,10 @@ test("panoramica e ricorrenze", async () => {
   assert.equal(o.netWorth, 990);
   assert.equal(o.last30.expenses, 82.1);
   assert.ok(o.agenda.some((a) => a.type === "consent"));
+  // Una banca collegata senza conti (abbandonata) non genera il promemoria di rinnovo
+  await as("service_role", null, "select yrols.yrols_bank_sync($1)", [{ connections: [{ id: "s2", bankName: "Abbandonata", validUntil: today + "T00:00:00Z" }] }]);
+  const [{ o2 }] = await as("authenticated", LORIS, "select yrols.yrols_overview() o2");
+  assert.equal(o2.agenda.filter((a) => a.type === "consent").length, 1);
   assert.equal(o.history.at(-1).total, 990);
   const [{ e }] = await as("authenticated", OTHER, "select yrols.yrols_overview() e");
   assert.equal(e.netWorth, 0, "un estraneo vede tutto vuoto");
