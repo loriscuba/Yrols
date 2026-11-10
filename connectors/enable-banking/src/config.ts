@@ -18,8 +18,10 @@ export interface ConnectorConfig {
   push?: Pusher;
   /** Descrizione leggibile della destinazione (per i log, senza segreti). */
   pushTarget?: string;
-  /** Stato delle sessioni in JSON (secret EB_STATE in GitHub Actions). */
+  /** Stato delle sessioni in JSON (secret EB_STATE, alternativa al database). */
   stateJson?: string;
+  /** Lettura delle connessioni dal database Supabase del cruscotto (default quando Supabase è configurato e EB_STATE no). */
+  supabaseStore?: { url: string; serviceKey: string; schema: string };
   /** 0 = disattivata. Default 360 (4 volte al giorno, limite PSD2 per accessi non presidiati). */
   syncIntervalMinutes: number;
   /** Certificato e chiave per servire https (necessario per la redirect di Enable Banking). */
@@ -49,9 +51,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfi
   const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
   let push: Pusher | undefined;
   let pushTarget: string | undefined;
+  let supabaseStore: ConnectorConfig["supabaseStore"];
   if (supabaseUrl && supabaseKey) {
     const rpc = env.SUPABASE_SYNC_RPC || "yrols_bank_sync";
     const schema = env.SUPABASE_SCHEMA || "yrols";
+    supabaseStore = { url: supabaseUrl, serviceKey: supabaseKey, schema };
     push = (payload) => pushToSupabase(payload, { url: supabaseUrl, serviceKey: supabaseKey, rpc, schema });
     pushTarget = `Supabase (${new URL(supabaseUrl).host}, ${schema}.${rpc})`;
   } else if (yrolsUrl && ingestToken) {
@@ -74,6 +78,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfi
     push,
     pushTarget,
     stateJson: env.EB_STATE || undefined,
+    supabaseStore: env.CONNECTIONS_SOURCE === "file" ? undefined : supabaseStore,
     syncIntervalMinutes: num(env.SYNC_INTERVAL_MINUTES, 360),
     tlsCertPath: env.TLS_CERT_PATH || undefined,
     tlsKeyPath: env.TLS_KEY_PATH || undefined,

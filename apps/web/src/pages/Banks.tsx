@@ -13,6 +13,8 @@ export function BanksPage() {
   const [q, setQ] = useState("");
   const params = new URLSearchParams({ limit: "300", ...(accountId && { accountId }), ...(q.length > 1 && { q }) });
   const txs = useData<Transaction[]>(`/banks/transactions?${params}`);
+  // I sottoconti a saldo zero (es. valute non usate) non si mostrano.
+  const visible = useMemo(() => (accounts.data ?? []).filter((a) => (a.balance ?? 0) !== 0 || a.id === accountId), [accounts.data, accountId]);
   const total = useMemo(() => (accounts.data ?? []).reduce((s, a) => s + (a.balance ?? 0), 0), [accounts.data]);
 
   return (
@@ -34,7 +36,7 @@ export function BanksPage() {
         <>
           <div className="stats">
             <Stat label="Totale sui conti" value={money(total)} />
-            {accounts.data?.map((a) => (
+            {visible.map((a) => (
               <button key={a.id} className={`stat stat-btn ${accountId === a.id ? "on" : ""}`} onClick={() => setAccountId(accountId === a.id ? "" : a.id)}>
                 <div className="stat-label">{a.bankName ?? "Banca"} · {a.name ?? a.iban ?? a.id}</div>
                 <div className="stat-value">{money(a.balance, a.currency)}</div>
