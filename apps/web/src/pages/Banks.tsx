@@ -13,6 +13,11 @@ export function BanksPage() {
   const [q, setQ] = useState("");
   const params = new URLSearchParams({ limit: "300", ...(accountId && { accountId }), ...(q.length > 1 && { q }) });
   const txs = useData<Transaction[]>(`/banks/transactions?${params}`);
+  // Consensi solo per le banche con almeno un conto (una banca collegata e poi abbandonata non conta).
+  const activeConnections = useMemo(() => {
+    const used = new Set((accounts.data ?? []).map((a) => a.connectionId));
+    return (connections.data ?? []).filter((c) => c.validUntil && used.has(c.id));
+  }, [accounts.data, connections.data]);
   const total = useMemo(() => (accounts.data ?? []).reduce((s, a) => s + (a.balance ?? 0), 0), [accounts.data]);
 
   return (
@@ -43,10 +48,10 @@ export function BanksPage() {
             ))}
           </div>
 
-          {connections.data && connections.data.some((c) => c.validUntil) && (
+          {activeConnections.length > 0 && (
             <Card title="Consensi bancari (PSD2)">
               <ul className="list">
-                {connections.data.filter((c) => c.validUntil).map((c) => (
+                {activeConnections.map((c) => (
                   <li key={c.id} className="row">
                     <span className="row-icon"><KeyRound size={16} aria-hidden /></span>
                     <span className="row-main"><span className="row-title">{c.bankName ?? c.id}</span><span className="row-sub">Valido fino al {date(c.validUntil)}: va rinnovato dal connettore</span></span>

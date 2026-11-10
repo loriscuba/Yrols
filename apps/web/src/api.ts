@@ -24,7 +24,7 @@ export const api = {
   del: (p: string) => req<void>("DELETE", p),
 };
 
-export interface Account { id: string; name: string | null; bankName: string | null; iban: string | null; currency: string; balance: number | null; balanceType: string | null; balanceDate: string | null; updatedAt: string }
+export interface Account { id: string; connectionId: string | null; name: string | null; bankName: string | null; iban: string | null; currency: string; balance: number | null; balanceType: string | null; balanceDate: string | null; updatedAt: string }
 export interface Transaction { id: string; accountId: string; amount: number; currency: string; bookingDate: string; description: string | null; counterparty: string | null; status: string; accountName: string | null; bankName: string | null }
 export interface Connection { id: string; bankName: string | null; country: string | null; validUntil: string | null; status: string | null }
 export interface Bill { id: number; provider: string; kind: string; amount: number; dueDate: string; periodFrom: string | null; periodTo: string | null; paidAt: string | null; notes: string | null }

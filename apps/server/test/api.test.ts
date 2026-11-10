@@ -51,6 +51,9 @@ test("sync bancaria: token, validazione e upsert", async () => {
     assert.equal(ov.netWorth, 990);
     assert.equal(ov.last30.expenses, 10.5);
     assert.ok(ov.agenda.some((a: any) => a.type === "consent"), "consenso in scadenza in agenda");
+    await call("POST", "/api/banks/sync", { connections: [{ id: "s2", bankName: "Abbandonata", validUntil: today }] }, auth);
+    const ov2 = (await call("GET", "/api/overview")).body;
+    assert.equal(ov2.agenda.filter((a: any) => a.type === "consent").length, 1, "banca senza conti esclusa");
   } finally { close(); }
 });
 

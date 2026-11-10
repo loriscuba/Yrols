@@ -22,7 +22,8 @@ export function overview(db: DB) {
   const deadlinesDue = db.prepare(`SELECT id, title, category, amount, due_date AS dueDate FROM deadlines
     WHERE done_at IS NULL AND due_date <= ? ORDER BY due_date`).all(in30) as { dueDate: string }[];
   const consents = db.prepare(`SELECT id, bank_name AS bankName, valid_until AS validUntil FROM bank_connections
-    WHERE valid_until IS NOT NULL AND substr(valid_until, 1, 10) <= ?`).all(in14) as { id: string; bankName: string | null; validUntil: string }[];
+    WHERE valid_until IS NOT NULL AND substr(valid_until, 1, 10) <= ?
+      AND EXISTS (SELECT 1 FROM bank_accounts a WHERE a.connection_id = bank_connections.id)`).all(in14) as { id: string; bankName: string | null; validUntil: string }[];
   const reminders = db.prepare(`SELECT id, text, remind_at AS remindAt, priority FROM reminders WHERE done_at IS NULL
     ORDER BY remind_at IS NULL, remind_at, CASE priority WHEN 'alta' THEN 0 WHEN 'normale' THEN 1 ELSE 2 END LIMIT 8`).all();
   const billsByKind = db.prepare(`SELECT kind, ROUND(SUM(amount), 2) AS total FROM bills WHERE due_date >= ? GROUP BY kind ORDER BY total DESC`).all(day(-365));
