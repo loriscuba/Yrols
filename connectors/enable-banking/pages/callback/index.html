@@ -54,6 +54,15 @@
   var title = document.getElementById("title");
   var msg = document.getElementById("msg");
   var code = q.get("code"), state = q.get("state"), error = q.get("error");
+  // Ritorno da Google (collegamento Gmail): lo "state" inizia con "gm-", si completa nella pagina Email.
+  if (state && state.indexOf("gm-") === 0) {
+    var mail = new URL("../email", location.href);
+    mail.searchParams.set("gm_state", state);
+    if (code) mail.searchParams.set("gm_code", code);
+    if (error) mail.searchParams.set("gm_error", error);
+    location.replace(mail.toString());
+    return;
+  }
   // Flusso dall'app: il cruscotto (pagina Banche) completa il collegamento con la Edge Function.
   // Con ?manual=1 resta il vecchio flusso da terminale (comando "callback" del connettore).
   if (state && (code || error) && q.get("manual") !== "1") {

@@ -1,5 +1,6 @@
 # Legge la casella email ogni ora e propone bollette/scadenze nel cruscotto online.
-# Secret richiesti: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, YROLS_IMAP_HOST, YROLS_IMAP_USER, YROLS_IMAP_PASSWORD.
+# Secret richiesti: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Gmail si collega dal cruscotto (OAuth in sola lettura,
+# token fornito dalla Edge Function yrols-email-auth); i secret YROLS_IMAP_* servono solo per altri provider.
 # Il repo è pubblico e i log anche: lo script stampa solo conteggi.
 name: Lettura email
 

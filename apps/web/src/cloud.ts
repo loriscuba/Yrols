@@ -115,8 +115,10 @@ export async function cloudRequest<T>(method: string, fullPath: string, body?: u
 
   if (parts[0] === "email") {
     if (parts[1] === "status") {
-      const r = ok(await sb.from("bank_syncs").select("at:received_at,summary").eq("source", "email").order("id", { ascending: false }).limit(1));
-      return { configured: !!r?.length, cloud: true, user: null, host: null, lastScan: r?.[0] ?? null } as T;
+      const r = ok(await sb.rpc("yrols_email_status")) as { account: { email: string; status: string; provider: string } | null; lastScan: unknown } | null;
+      const acc = r?.account ?? null;
+      return { configured: !!acc || !!r?.lastScan, cloud: true, user: acc?.email ?? null, host: null, provider: acc?.provider ?? null,
+        accountStatus: acc?.status ?? null, lastScan: r?.lastScan ?? null } as T;
     }
     if (parts[1] === "scan") throw new Error("Online la posta viene letta in automatico ogni ora da GitHub");
     if (parts[1] === "suggestions" && !parts[2]) {
