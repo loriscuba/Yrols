@@ -2,7 +2,8 @@
  * Riconosce bollette e scadenze nelle email (euristiche pensate per i fornitori italiani).
  * Funzione pura: nessun accesso alla rete, facile da testare.
  */
-export interface ParsedEmail { from: string; subject: string; text: string; date?: Date }
+export interface PdfAttachment { filename: string; content: Uint8Array }
+export interface ParsedEmail { from: string; subject: string; text: string; date?: Date; pdfs?: PdfAttachment[] }
 export interface Suggestion {
   kind: "bill" | "deadline";
   provider: string | null;
@@ -13,7 +14,7 @@ export interface Suggestion {
   snippet: string;
 }
 
-const PROVIDERS: [RegExp, string, string][] = [
+export const PROVIDERS: [RegExp, string, string][] = [
   [/\benel\b/i, "Enel Energia", "luce"],
   [/plenitude|\beni\b/i, "Eni Plenitude", "gas"],
   [/\ba2a\b/i, "A2A", "luce"],
@@ -136,4 +137,12 @@ export function parseEmail(e: ParsedEmail): Suggestion | null {
     dueDate,
     snippet,
   };
+}
+
+/** PDF allegati a un messaggio (mailparser), al massimo 3 e 10 MB l'uno: sono le fatture da leggere. */
+export function pdfAttachments(parsed: { attachments?: { filename?: string; contentType?: string; content: Uint8Array; size?: number }[] }): PdfAttachment[] {
+  return (parsed.attachments ?? [])
+    .filter((a) => (a.contentType === "application/pdf" || /\.pdf$/i.test(a.filename ?? "")) && a.content.byteLength <= 10 * 1024 * 1024)
+    .slice(0, 3)
+    .map((a) => ({ filename: a.filename ?? "fattura.pdf", content: new Uint8Array(a.content) }));
 }

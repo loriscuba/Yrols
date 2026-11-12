@@ -20,7 +20,8 @@ const META = {
 type Def = { cols: Record<string, string>; numeric: string[]; order: [string, boolean, boolean?][] };
 const TABLES: Record<string, Def> = {
   bills: {
-    cols: { provider: "provider", kind: "kind", amount: "amount", dueDate: "due_date", periodFrom: "period_from", periodTo: "period_to", paidAt: "paid_at", notes: "notes" },
+    cols: { provider: "provider", kind: "kind", amount: "amount", dueDate: "due_date", periodFrom: "period_from", periodTo: "period_to", paidAt: "paid_at", notes: "notes",
+            invoiceNumber: "invoice_number", issueDate: "issue_date", items: "items", filePath: "file_path", source: "source" },
     numeric: ["amount"],
     order: [["paid_at", true, false], ["due_date", true]],
   },
@@ -35,6 +36,16 @@ const TABLES: Record<string, Def> = {
     order: [["done_at", true, false], ["remind_at", true, true], ["id", false]],
   },
 };
+const BUCKET = "yrols-fatture";
+
+/** Carica il PDF di una fattura nel bucket privato e restituisce il percorso da salvare sulla bolletta. */
+export async function uploadInvoicePdf(file: File): Promise<string> {
+  const path = `manuale/${crypto.randomUUID()}.pdf`;
+  const r = await supabase!.storage.from(BUCKET).upload(path, file, { contentType: "application/pdf", upsert: false });
+  if (r.error) throw new Error(`PDF non caricato: ${r.error.message}`);
+  return path;
+}
+
 const select = (d: Def) => ["id", ...Object.entries(d.cols).map(([k, c]) => (k === c ? c : `${k}:${c}`)), "createdAt:created_at"].join(",");
 
 function toRow(d: Def, body: Record<string, unknown>) {
@@ -77,6 +88,17 @@ export async function cloudRequest<T>(method: string, fullPath: string, body?: u
 
   if (path === "/overview") return ok(await sb.rpc("yrols_overview")) as T;
   if (path === "/meta") return META as T;
+
+  if (parts[0] === "bills" && parts[1] === "invoice") return ok(await sb.rpc("yrols_save_invoice", { bill: b })) as T;
+  if (parts[0] === "bills" && parts[1] === "file") {
+    const r = ok(await sb.storage.from(BUCKET).createSignedUrl(String(q.get("path")), 300));
+    return { url: r?.signedUrl } as T;
+  }
+  if (parts[0] === "bills" && method === "DELETE") {
+    // Elimina anche il PDF della fattura, se c'è.
+    const r = ok(await sb.from("bills").select("file_path").eq("id", Number(parts[1])).maybeSingle()) as { file_path: string | null } | null;
+    if (r?.file_path) await sb.storage.from(BUCKET).remove([r.file_path]);
+  }
 
   const def = TABLES[parts[0]];
   if (def) {
@@ -128,7 +150,7 @@ export async function cloudRequest<T>(method: string, fullPath: string, body?: u
     if (parts[1] === "scan") throw new Error("Online la posta viene letta in automatico ogni ora da GitHub");
     if (parts[1] === "suggestions" && !parts[2]) {
       const r = ok(await sb.from("email_suggestions")
-        .select("id,sender,subject,receivedAt:received_at,kind,provider,billKind:bill_kind,title,amount,dueDate:due_date,snippet,status,createdId:created_id")
+        .select("id,sender,subject,receivedAt:received_at,kind,provider,billKind:bill_kind,title,amount,dueDate:due_date,snippet,status,createdId:created_id,invoiceNumber:invoice_number,filePath:file_path")
         .eq("status", q.get("status") ?? "pending").order("due_date", { ascending: false, nullsFirst: false }));
       return num(r as Record<string, unknown>[], ["amount"]) as T;
     }

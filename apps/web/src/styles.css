@@ -224,3 +224,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .bank-pick:disabled { opacity: 0.6; cursor: default; }
 .bank-logo { width: 32px; height: 32px; object-fit: contain; border-radius: 8px; background: #fff; flex: none; }
 .banner .btn { margin-left: auto; }
+
+/* Fatture */
+.head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
+.link-btn:hover { text-decoration: underline; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 16px; }
+.facts dt { color: var(--text-muted); }
+.facts dd { margin: 0; }
+.form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.field { min-width: 0; }
+.field input, .field select, .field textarea { min-width: 0; width: 100%; box-sizing: border-box; }
+.form > .banner { overflow-wrap: anywhere; }
+.modal-inner { overflow-x: hidden; }

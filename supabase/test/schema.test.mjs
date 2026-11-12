@@ -116,3 +116,37 @@ test("Gmail collegata: token invisibile al cruscotto, stato senza segreti", asyn
   assert.equal(o, null, "un estraneo non vede la casella");
   await assert.rejects(as("anon", null, "select yrols.yrols_email_status()"));
 });
+
+test("fatture: niente doppioni tra PDF caricato e proposta email", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  // La mail arriva prima, senza PDF: resta una proposta.
+  await as("service_role", null, "insert into yrols.email_suggestions (message_id, subject, kind, provider, bill_kind, amount, due_date) values ('<f1>', 'Conto Fastweb', 'bill', 'Fastweb', 'internet', 42.19, '2026-11-25')");
+  const inv = { provider: "Fastweb", kind: "internet", amount: "42,19", dueDate: "2026-11-25", invoiceNumber: "M000000001", issueDate: "2026-11-01",
+    periodFrom: "2026-10-01", periodTo: "2026-10-31", filePath: "manuale/x.pdf", source: "pdf", items: [{ description: "Canone", amount: 42.19, vat: 22 }] };
+  const [{ r }] = await as("authenticated", LORIS, "select yrols.yrols_save_invoice($1) r", [inv]);
+  assert.equal(r.merged, false);
+  const [{ status, created_id }] = await as("authenticated", LORIS, "select status, created_id from yrols.email_suggestions");
+  assert.equal(status, "accepted", "la proposta email della stessa fattura si chiude da sola");
+  assert.equal(Number(created_id), Number(r.id));
+  // Ricaricare lo stesso PDF completa la bolletta esistente.
+  const [{ r: r2 }] = await as("authenticated", LORIS, "select yrols.yrols_save_invoice($1) r", [{ ...inv, notes: "ricaricata" }]);
+  assert.deepEqual([r2.merged, Number(r2.id)], [true, Number(r.id)]);
+  // Una bolletta inserita a mano senza numero viene completata dal PDF.
+  await as("authenticated", LORIS, "insert into yrols.bills (provider, kind, amount, due_date) values ('Enel Energia', 'luce', 80, '2026-12-10')");
+  const [{ r: r3 }] = await as("authenticated", LORIS, "select yrols.yrols_save_invoice($1) r", [{ provider: "enel energia", amount: 80, dueDate: "2026-12-10", invoiceNumber: "E1", filePath: "manuale/e.pdf" }]);
+  assert.equal(r3.merged, true);
+  const bills = await as("authenticated", LORIS, "select provider, invoice_number n, file_path f, source, jsonb_array_length(items) i from yrols.bills order by id");
+  assert.deepEqual(bills, [
+    { provider: "Fastweb", n: "M000000001", f: "manuale/x.pdf", source: "pdf", i: 1 },
+    { provider: "Enel Energia", n: "E1", f: "manuale/e.pdf", source: "manuale", i: null },
+  ]);
+  await assert.rejects(as("authenticated", OTHER, "select yrols.yrols_save_invoice($1)", [inv]));
+  await assert.rejects(as("anon", null, "select yrols.yrols_save_invoice($1)", [inv]));
+  // Proposta email con PDF allegato: accettandola la bolletta eredita numero, voci e PDF.
+  await as("service_role", null, "insert into yrols.email_suggestions (message_id, subject, kind, provider, bill_kind, amount, due_date, invoice_number, file_path) values ('<f2>', 'Fattura', 'bill', 'A2A', 'luce', 50, '2027-01-10', 'A9', 'email/a.pdf')");
+  const [{ id }] = await as("authenticated", LORIS, "select id from yrols.email_suggestions where message_id = '<f2>'");
+  await as("authenticated", LORIS, "select yrols.yrols_accept_suggestion($1)", [id]);
+  const [a2a] = await as("authenticated", LORIS, "select invoice_number n, file_path f, source from yrols.bills where provider = 'A2A'");
+  assert.deepEqual(a2a, { n: "A9", f: "email/a.pdf", source: "email" });
+});
