@@ -127,7 +127,7 @@ function SuggestionRow({ s, onDone }: { s: Suggestion; onDone: () => void }) {
         <span className="row-icon"><Icon size={16} aria-hidden /></span>
         <span className="row-main">
           <span className="row-title">{s.subject}</span>
-          <span className="row-sub">{s.sender} · {date(s.receivedAt)} · {s.kind === "bill" ? `Bolletta ${label(s.billKind)}` : "Scadenza"}</span>
+          <span className="row-sub">{s.sender} · {date(s.receivedAt)} · {s.kind === "bill" ? `Bolletta ${label(s.billKind)}` : "Scadenza"}{s.invoiceNumber ? ` · fattura ${s.invoiceNumber}` : ""}{s.filePath ? " · PDF allegato" : ""}</span>
         </span>
       </div>
       {s.snippet && <p className="snippet">{s.snippet}</p>}

@@ -3,7 +3,7 @@
  * Produce lo stesso formato di readMailbox (IMAP), così il riconoscimento bollette è condiviso.
  */
 import { simpleParser } from "mailparser";
-import type { ParsedEmail } from "./emailParser.ts";
+import { pdfAttachments, type ParsedEmail } from "./emailParser.ts";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
@@ -41,6 +41,6 @@ export async function* readGmail(token: string, opts: GmailOptions, seen: Set<st
     if (!raw) continue;
     const parsed = await simpleParser(Buffer.from(raw, "base64url"));
     const text = parsed.text || (typeof parsed.html === "string" ? parsed.html.replace(/<[^>]+>/g, " ") : "");
-    yield { messageId, email: { from: parsed.from?.text ?? "", subject: parsed.subject ?? "", text, date: parsed.date } };
+    yield { messageId, email: { from: parsed.from?.text ?? "", subject: parsed.subject ?? "", text, date: parsed.date, pdfs: pdfAttachments(parsed) } };
   }
 }

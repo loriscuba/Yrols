@@ -2,7 +2,7 @@ import { Router } from "express";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import type { DB } from "./db.ts";
-import { parseEmail, type ParsedEmail } from "./emailParser.ts";
+import { parseEmail, pdfAttachments, type ParsedEmail } from "./emailParser.ts";
 import { insertRow, BadInput } from "./household.ts";
 
 export interface ImapConfig {
@@ -55,7 +55,7 @@ export async function* readMailbox(cfg: ImapConfig, seen: Set<string>): AsyncGen
         if (seen.has(messageId) || !msg.source) continue;
         const parsed = await simpleParser(msg.source);
         const text = parsed.text || (typeof parsed.html === "string" ? parsed.html.replace(/<[^>]+>/g, " ") : "");
-        yield { messageId, email: { from: parsed.from?.text ?? "", subject: parsed.subject ?? "", text, date: parsed.date } };
+        yield { messageId, email: { from: parsed.from?.text ?? "", subject: parsed.subject ?? "", text, date: parsed.date, pdfs: pdfAttachments(parsed) } };
       }
     } finally {
       lock.release();
