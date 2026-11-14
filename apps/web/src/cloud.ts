@@ -168,7 +168,7 @@ export async function cloudRequest<T>(method: string, fullPath: string, body?: u
   if (parts[0] === "savings") {
     if (method === "GET" && !parts[1]) {
       const [offers, runs, profile, suppliers] = await Promise.all([
-        sb.from("saving_offers").select("id,category,provider,name,priceType:price_type,monthlyCost:monthly_cost,currentMonthly:current_monthly,currentProvider:current_provider,priceDetails:price_details,conditions,url,source,validUntil:valid_until,status,active,firstSeen:first_seen,lastSeen:last_seen")
+        sb.from("saving_offers").select("id,category,provider,name,priceType:price_type,monthlyCost:monthly_cost,currentMonthly:current_monthly,currentProvider:current_provider,priceDetails:price_details,conditions,url,source,validUntil:valid_until,status,active,firstSeen:first_seen,lastSeen:last_seen,regularCost:regular_cost,promoMonths:promo_months")
           .order("monthly_cost"),
         sb.from("saving_runs").select("runAt:run_at,sources,summary,offersCount:offers_count").order("id", { ascending: false }).limit(1),
         sb.from("saving_profile").select("kwhYear:kwh_year,smcYear:smc_year,powerKw:power_kw,resident,province,internetMinMbps:internet_min_mbps,mobileLines:mobile_lines,mobileGb:mobile_gb,notes,updatedAt:updated_at").maybeSingle(),
@@ -176,7 +176,7 @@ export async function cloudRequest<T>(method: string, fullPath: string, body?: u
         sb.from("suppliers").select("name,kind,monthly,status"),
       ]);
       return {
-        offers: num(ok(offers) as Record<string, unknown>[], ["monthlyCost", "currentMonthly"]),
+        offers: num(ok(offers) as Record<string, unknown>[], ["monthlyCost", "currentMonthly", "regularCost"]),
         lastRun: (ok(runs) as unknown[])[0] ?? null,
         profile: num([ok(profile) as Record<string, unknown> ?? {}], ["kwhYear", "smcYear", "powerKw"])[0],
         suppliers: suppliers.error ? null : num(suppliers.data as Record<string, unknown>[], ["monthly"]),

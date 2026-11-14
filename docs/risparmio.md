@@ -42,18 +42,22 @@ e non modificare tabelle diverse da quelle indicate: le scritture passano SOLO d
    - internet casa (fibra FTTH/FTTC alla velocità minima del profilo) e telefonia mobile (giga e linee del profilo);
    - per gli abbonamenti, solo se esiste lo stesso servizio a meno (es. piano annuale).
    Calcola per ognuna la spesa mensile stimata PER I CONSUMI DEL PROFILO, IVA e oneri inclusi
-   (per le variabili usa il PUN/PSV medio atteso indicato dai comparatori). Includi anche le promo a tempo,
-   indicando in conditions quando finisce lo sconto e il costo dopo. Tieni le 3-5 migliori per voce,
+   (per le variabili usa il PUN/PSV medio atteso indicato dai comparatori).
+   PROMO: per ogni offerta verifica sulla pagina se il prezzo (o uno sconto, anche una tantum) vale solo per i primi
+   mesi/il primo anno. In quel caso monthlyCost è il prezzo iniziale, regularCost il prezzo a regime dopo la promo e
+   promoMonths la durata; uno sconto una tantum di S € nel primo anno vale monthlyCost = regularCost − S/12 e promoMonths 12.
+   Senza promo lascia regularCost e promoMonths vuoti. Il cruscotto ordina e calcola il risparmio sul prezzo a regime. Tieni le 3-5 migliori per voce,
    più l'offerta attuale del fornitore se la trovi. Scarta offerte solo per nuovi clienti di altri servizi,
    business, o con vincoli contrari alle note del profilo.
 
 3. Salva tutto con UNA chiamata:
    select yrols.yrols_save_offers($json$ { "sources": ["..."], "summary": "...", "offers": [ ... ] } $json$::jsonb);
    Ogni offerta: {"category": "luce|gas|internet|telefono|abbonamenti", "provider", "name", "priceType": "fisso|variabile",
-   "monthlyCost": numero, "currentMonthly": numero (spesa attuale di quella voce), "currentProvider",
+   "monthlyCost": numero, "regularCost": numero o null, "promoMonths": numero o null,
+   "currentMonthly": numero (spesa attuale di quella voce), "currentProvider",
    "priceDetails": "es. 0,115 €/kWh + 8 €/mese", "conditions": "vincoli, promo, costi di attivazione",
    "url": "https://... pagina dell'offerta", "source": "es. Selectra", "validUntil": "AAAA-MM-GG" o null}.
-   summary: 1-3 frasi per Loris con il risparmio annuo migliore e cosa conviene fare (es. "Passando a X per la luce
+   summary: 1-3 frasi per Loris con il risparmio annuo migliore A REGIME (dopo le promo) e cosa conviene fare (es. "Passando a X per la luce
    risparmi circa 120 € l'anno; internet: Fastweb è già tra i più economici").
    Non inventare prezzi: ogni offerta deve venire da una pagina letta in questo controllo, con il suo url.
 

@@ -18,6 +18,21 @@ export interface SavingOffer {
   monthlyCost: number; currentMonthly: number | null; currentProvider: string | null;
   priceDetails: string | null; conditions: string | null; url: string | null; source: string;
   validUntil: string | null; status: "nuova" | "vista" | "nascosta"; active: boolean; firstSeen: string; lastSeen: string;
+  /** Prezzo mensile a regime, finita la promo; null se monthlyCost non è promozionale. */
+  regularCost?: number | null;
+  /** Mesi a prezzo promozionale (monthlyCost) prima di passare a regularCost. */
+  promoMonths?: number | null;
+}
+
+/** Prezzo mensile a regime: quello che si paga finita l'eventuale promo. */
+export const regularPrice = (o: Pick<SavingOffer, "monthlyCost" | "regularCost">) => o.regularCost ?? o.monthlyCost;
+/** C'è una promo solo se il prezzo a regime è diverso da quello iniziale. */
+export const isPromo = (o: Pick<SavingOffer, "monthlyCost" | "regularCost">) => o.regularCost != null && Math.abs(o.regularCost - o.monthlyCost) >= 0.01;
+/** Spesa del primo anno con l'offerta: mesi in promo al prezzo iniziale, il resto a regime. */
+export function firstYearCost(o: Pick<SavingOffer, "monthlyCost" | "regularCost" | "promoMonths">) {
+  if (!isPromo(o)) return round(o.monthlyCost * 12);
+  const promo = Math.min(12, o.promoMonths ?? 12);
+  return round(o.monthlyCost * promo + regularPrice(o) * (12 - promo));
 }
 
 /** Voce di spesa attuale. */
@@ -72,15 +87,25 @@ export function currentSpend(offers: SavingOffer[], suppliers: SupplierLite[] | 
   return SAVING_CATEGORIES.flatMap((c) => (out.has(c) ? [round2(out.get(c)!)] : []));
 }
 
+export type RankedOffer = SavingOffer & {
+  /** Risparmio mensile a regime, cioè finita la promo (negativo se costa di più). */
+  saving: number | null;
+  /** Risparmio nei primi 12 mesi, promo compresa. */
+  firstYearSaving: number | null;
+};
+
 export interface CategorySummary {
   category: SavingCategory; label: string; current: CurrentSpend | null;
-  offers: (SavingOffer & { saving: number | null })[];
-  best: (SavingOffer & { saving: number | null }) | null;
-  /** Risparmio mensile con l'offerta migliore (0 se nessuna offerta conviene, null se la spesa attuale non è nota). */
+  offers: RankedOffer[];
+  best: RankedOffer | null;
+  /** Risparmio mensile a regime con l'offerta migliore (0 se nessuna conviene, null se la spesa attuale non è nota). */
   monthlySaving: number | null;
 }
 
-/** Offerte attive e non nascoste per voce, dalla più economica, con il risparmio rispetto alla spesa attuale. */
+/**
+ * Offerte attive e non nascoste per voce, dalla più economica A REGIME (le promo del primo periodo non contano
+ * nell'ordine), con il risparmio a regime e quello del primo anno rispetto alla spesa attuale.
+ */
 export function summarize(offers: SavingOffer[], current: CurrentSpend[], showHidden = false): CategorySummary[] {
   const curBy = new Map(current.map((c) => [c.category, c]));
   return SAVING_CATEGORIES.map((category) => {
@@ -89,9 +114,13 @@ export function summarize(offers: SavingOffer[], current: CurrentSpend[], showHi
       .filter((o) => o.category === category && o.active && (showHidden || o.status !== "nascosta"))
       .map((o) => {
         const base = o.currentMonthly ?? cur?.monthly ?? null;
-        return { ...o, saving: base == null ? null : round(base - o.monthlyCost) };
+        return {
+          ...o,
+          saving: base == null ? null : round(base - regularPrice(o)),
+          firstYearSaving: base == null ? null : round(base * 12 - firstYearCost(o)),
+        };
       })
-      .sort((a, b) => a.monthlyCost - b.monthlyCost || a.provider.localeCompare(b.provider));
+      .sort((a, b) => regularPrice(a) - regularPrice(b) || a.monthlyCost - b.monthlyCost || a.provider.localeCompare(b.provider));
     const best = list.find((o) => o.status !== "nascosta") ?? null;
     const monthlySaving = best?.saving == null ? null : Math.max(0, best.saving);
     return { category, label: CATEGORY_LABEL[category], current: cur, offers: list, best, monthlySaving };

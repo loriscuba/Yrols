@@ -197,4 +197,8 @@ test("risparmio: offerte salvate dal controllo settimanale, stato conservato, so
   assert.equal((await as("authenticated", OTHER, "select * from yrols.saving_offers")).length, 0);
   await assert.rejects(as("anon", null, "select * from yrols.saving_offers"));
   await assert.rejects(as("anon", null, "select yrols.yrols_save_offers($1)", [run1]));
+  // Prezzo promozionale: si salva anche il prezzo a regime e la durata della promo.
+  await as("service_role", null, "select yrols.yrols_save_offers($1)", [{ offers: [offer({ category: "internet", provider: "Beactive", name: "Fiber", monthlyCost: 15.5, regularCost: 25.9, promoMonths: 6 })] }]);
+  assert.deepEqual((await as("authenticated", LORIS, "select regular_cost::float r, promo_months p from yrols.saving_offers where provider = 'Beactive'"))[0], { r: 25.9, p: 6 });
+  await assert.rejects(as("service_role", null, "select yrols.yrols_save_offers($1)", [{ offers: [offer({ promoMonths: 0 })] }]));
 });
