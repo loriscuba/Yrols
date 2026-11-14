@@ -1,12 +1,13 @@
 import { Router, type Request } from "express";
 import type { DB } from "./db.ts";
 
-type Field = { name: string; col: string; type: "string" | "number" | "date" | "datetime"; required?: boolean; enum?: string[] };
+type Field = { name: string; col: string; type: "string" | "number" | "boolean" | "date" | "datetime"; required?: boolean; enum?: string[] };
 
 export const BILL_KINDS = ["luce", "gas", "acqua", "internet", "telefono", "rifiuti", "condominio", "affitto", "mutuo", "altro"];
 export const DEADLINE_CATEGORIES = ["casa", "auto", "tasse", "assicurazione", "salute", "documenti", "abbonamenti", "scuola", "altro"];
 export const RECURRENCES = ["none", "monthly", "bimonthly", "quarterly", "semiannual", "yearly"];
 export const PRIORITIES = ["bassa", "normale", "alta"];
+export const SUPPLIER_STATUSES = ["attivo", "nascosto"];
 
 export const RESOURCES: Record<string, { table: string; order: string; fields: Field[] }> = {
   bills: {
@@ -33,6 +34,23 @@ export const RESOURCES: Record<string, { table: string; order: string; fields: F
       { name: "amount", col: "amount", type: "number" },
       { name: "recurrence", col: "recurrence", type: "string", enum: RECURRENCES },
       { name: "doneAt", col: "done_at", type: "date" },
+      { name: "notes", col: "notes", type: "string" },
+    ],
+  },
+  suppliers: {
+    table: "suppliers",
+    order: "name COLLATE NOCASE",
+    fields: [
+      { name: "key", col: "key", type: "string", required: true },
+      { name: "name", col: "name", type: "string", required: true },
+      { name: "kind", col: "kind", type: "string", enum: BILL_KINDS },
+      { name: "status", col: "status", type: "string", enum: SUPPLIER_STATUSES },
+      { name: "monthly", col: "monthly", type: "number" },
+      { name: "directDebit", col: "direct_debit", type: "boolean" },
+      { name: "customerCode", col: "customer_code", type: "string" },
+      { name: "contractCode", col: "contract_code", type: "string" },
+      { name: "website", col: "website", type: "string" },
+      { name: "phone", col: "phone", type: "string" },
       { name: "notes", col: "notes", type: "string" },
     ],
   },
@@ -64,7 +82,10 @@ function parse(fields: Field[], body: Record<string, unknown>, partial: boolean)
       out[f.col] = null;
       continue;
     }
-    if (f.type === "number") {
+    if (f.type === "boolean") {
+      if (typeof v !== "boolean") throw new BadInput(`${f.name} deve essere vero o falso`);
+      out[f.col] = v ? 1 : 0;
+    } else if (f.type === "number") {
       const n = typeof v === "string" ? Number(v.replace(",", ".")) : v;
       if (typeof n !== "number" || !Number.isFinite(n)) throw new BadInput(`${f.name} deve essere un numero`);
       out[f.col] = n;

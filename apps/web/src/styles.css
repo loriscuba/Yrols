@@ -241,3 +241,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .field input, .field select, .field textarea { min-width: 0; width: 100%; box-sizing: border-box; }
 .form > .banner { overflow-wrap: anywhere; }
 .modal-inner { overflow-x: hidden; }
+
+/* Fornitori */
+.row-btn { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.row-btn > .right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.row-sub.block { display: block; }
+.facts.wide { grid-column: 1 / -1; margin: 0; }
+.mini-head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 4px 0 0; }
+.list.compact .row { padding: 6px 0; }
+.form .hint a { color: var(--accent); display: inline-flex; align-items: center; gap: 4px; }

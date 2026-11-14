@@ -116,3 +116,17 @@ test("suggerimenti da email: conferma crea la bolletta", async () => {
     assert.equal((await call("POST", "/api/email/scan")).status, 503);
   } finally { close(); }
 });
+
+test("fornitori: crea, aggiorna, nascondi (modalità locale)", async () => {
+  const { call, close } = await start();
+  try {
+    const c = await call("POST", "/api/suppliers", { key: "fastweb", name: "Fastweb", kind: "internet", status: "attivo", monthly: 37.9, directDebit: true });
+    assert.equal(c.status, 201);
+    assert.equal(c.body.directDebit, 1);
+    assert.equal((await call("POST", "/api/suppliers", { key: "x", name: "X", kind: "pizza" })).status, 400);
+    const p = await call("PATCH", `/api/suppliers/${c.body.id}`, { customerCode: "C1", status: "nascosto" });
+    assert.equal(p.body.customerCode, "C1");
+    assert.equal(p.body.status, "nascosto");
+    assert.equal((await call("GET", "/api/suppliers")).body.length, 1);
+  } finally { close(); }
+});

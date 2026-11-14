@@ -30,6 +30,12 @@ const TABLES: Record<string, Def> = {
     numeric: ["amount"],
     order: [["done_at", true, false], ["due_date", true]],
   },
+  suppliers: {
+    cols: { key: "key", name: "name", kind: "kind", status: "status", monthly: "monthly", directDebit: "direct_debit", customerCode: "customer_code",
+            contractCode: "contract_code", website: "website", phone: "phone", notes: "notes" },
+    numeric: ["monthly"],
+    order: [["name", true]],
+  },
   reminders: {
     cols: { text: "text", remindAt: "remind_at", priority: "priority", doneAt: "done_at" },
     numeric: [],
@@ -68,6 +74,7 @@ function toRow(d: Def, body: Record<string, unknown>) {
 function friendly(e: { message?: string; code?: string } | null): Error {
   const m = e?.message ?? "Errore sconosciuto";
   if (e?.code === "23502") return new Error("Compila tutti i campi obbligatori");
+  if (e?.code === "23505") return new Error("Esiste già un elemento con questo nome");
   if (e?.code === "23514") return new Error("Valore non valido in uno dei campi");
   if (e?.code === "42501" || /permission|row-level/i.test(m)) return new Error("Accesso non autorizzato: rientra con il tuo account");
   return new Error(m);

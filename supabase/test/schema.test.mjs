@@ -150,3 +150,20 @@ test("fatture: niente doppioni tra PDF caricato e proposta email", async () => {
   const [a2a] = await as("authenticated", LORIS, "select invoice_number n, file_path f, source from yrols.bills where provider = 'A2A'");
   assert.deepEqual(a2a, { n: "A9", f: "email/a.pdf", source: "email" });
 });
+
+test("fornitori: solo membri, chiave unica, updated_at aggiornato", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  await as("authenticated", LORIS, "insert into yrols.suppliers (key, name, kind, monthly, direct_debit) values ('fastweb', 'Fastweb', 'internet', 37.9, true)");
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.suppliers (key, name) values ('fastweb', 'Doppione')"));
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.suppliers (key, name, kind) values ('x', 'X', 'pizza')"));
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.suppliers (key, name) values ('Spazi Vietati', 'X')"));
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.suppliers")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.suppliers"));
+  const [before] = await as("authenticated", LORIS, "select updated_at from yrols.suppliers");
+  await new Promise((r) => setTimeout(r, 20));
+  await as("authenticated", LORIS, "update yrols.suppliers set status = 'nascosto'");
+  const [after] = await as("authenticated", LORIS, "select status, updated_at from yrols.suppliers");
+  assert.equal(after.status, "nascosto");
+  assert.ok(after.updated_at > before.updated_at);
+});
