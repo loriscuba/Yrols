@@ -40,3 +40,4 @@ export interface Overview {
   billsByKind: { kind: string; total: number }[]; history: { date: string; total: number }[]; pendingEmail: number;
 }
 export interface Meta { billKinds: string[]; deadlineCategories: string[]; recurrences: string[]; priorities: string[] }
+export type { SavedSupplier } from "../../server/src/suppliers.ts";
