@@ -6,7 +6,7 @@ import { cloudEnabled } from "../cloud";
 import { useProjection } from "../projection";
 import { date, dateTime, money } from "../format";
 import { Card, Empty, ErrorBanner, Field, Modal, Stat } from "../components/ui";
-import { currentSpend, summarize, type SavingCategory, type SavingOffer, type SupplierLite } from "../../../server/src/savings.ts";
+import { currentSpend, isPromo, regularPrice, summarize, type SavingCategory, type SavingOffer, type SupplierLite } from "../../../server/src/savings.ts";
 
 interface Profile {
   kwhYear: number | null; smcYear: number | null; powerKw: number | null; resident: boolean | null; province: string | null;
@@ -63,7 +63,7 @@ export function SavingsPage() {
         <>
           <div className="stats">
             <Stat label="Risparmio possibile" value={money(monthly * 12)} tone={monthly > 0 ? "good" : undefined}
-              hint={monthly > 0 ? `all'anno, ${money(monthly)} al mese con le offerte migliori` : "Nessuna offerta più conveniente per ora"} />
+              hint={monthly > 0 ? `all'anno a prezzi pieni, finite le promo (${money(monthly)} al mese)` : "Nessuna offerta più conveniente per ora"} />
             <Stat label="Offerte nuove" value={String(fresh)} hint="Da guardare" />
             <Stat label="Ultimo controllo" value={data.lastRun ? date(data.lastRun.runAt, { day: "numeric", month: "short" }) : "—"}
               hint={data.lastRun ? `${data.lastRun.offersCount} offerte · ${data.lastRun.sources.join(", ")}` : "Il primo controllo arriva entro una settimana"} />
@@ -102,10 +102,18 @@ export function SavingsPage() {
                           </span>
                         </span>
                         <span className="savings-cost">
-                          <span className="num">{money(o.monthlyCost)}<span className="hint"> /mese</span></span>
+                          <span className="num">{money(regularPrice(o))}<span className="hint"> /mese{isPromo(o) ? " a regime" : ""}</span></span>
+                          {isPromo(o) && (
+                            <span className="badge warning" title="Prezzo promozionale: dopo sale al prezzo a regime">
+                              {money(o.monthlyCost)} solo {o.promoMonths ? `per ${o.promoMonths} ${o.promoMonths === 1 ? "mese" : "mesi"}` : "all'inizio"}
+                            </span>
+                          )}
                           {o.saving != null && (o.saving > 0
-                            ? <span className="num pos">−{money(o.saving * 12)} l'anno</span>
-                            : <span className="hint">{o.saving === 0 ? "come oggi" : `+${money(-o.saving)} al mese`}</span>)}
+                            ? <span className="num pos">−{money(o.saving * 12)} l'anno{isPromo(o) ? " dopo la promo" : ""}</span>
+                            : <span className="hint">{o.saving === 0 ? "come oggi" : `+${money(-o.saving)} al mese${isPromo(o) ? " dopo la promo" : ""}`}</span>)}
+                          {isPromo(o) && o.firstYearSaving != null && o.firstYearSaving > 0 && (
+                            <span className="hint">primo anno −{money(o.firstYearSaving)}</span>
+                          )}
                         </span>
                         <span className="actions">
                           {o.url && <a className="icon-btn" href={o.url} target="_blank" rel="noopener noreferrer" aria-label="Apri l'offerta"><ExternalLink size={16} /></a>}
@@ -127,7 +135,7 @@ export function SavingsPage() {
               {showHidden ? "Nascondi le offerte scartate" : `Mostra ${hidden} ${hidden === 1 ? "offerta nascosta" : "offerte nascoste"}`}
             </button>
           )}
-          <p className="hint">I prezzi sono stime mensili con IVA e oneri, per i tuoi consumi, prese da comparatori pubblici e dai siti dei fornitori. Prima di cambiare controlla la scheda dell'offerta: vincoli, durata del prezzo bloccato, costi di attivazione.{data.profile.updatedAt ? ` Consumi aggiornati il ${dateTime(data.profile.updatedAt)}.` : ""}</p>
+          <p className="hint">I prezzi sono stime mensili con IVA e oneri, per i tuoi consumi. Il risparmio è calcolato sul prezzo a regime, cioè finite le promozioni; le offerte con prezzo scontato solo all'inizio hanno l'etichetta gialla. Le stime sono prese da comparatori pubblici e dai siti dei fornitori. Prima di cambiare controlla la scheda dell'offerta: vincoli, durata del prezzo bloccato, costi di attivazione.{data.profile.updatedAt ? ` Consumi aggiornati il ${dateTime(data.profile.updatedAt)}.` : ""}</p>
         </>
       )}
 
