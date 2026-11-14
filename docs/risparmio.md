@@ -6,7 +6,7 @@ le offerte più convenienti di quello che si paga oggi.
 ## Come funziona
 
 - **Dati**: tabelle `yrols.saving_offers`, `yrols.saving_runs`, `yrols.saving_profile` (migrazione
-  `20261114110000_yrols_risparmio.sql`). Si scrive con la RPC `yrols.yrols_save_offers(run jsonb)`.
+  `20261114120000_yrols_risparmio.sql`). Si scrive con la RPC `yrols.yrols_save_offers(run jsonb)`.
 - **Controllo settimanale**: un'attività pianificata di Claude (ogni lunedì mattina) legge spesa attuale e
   profilo di consumo da Supabase, cerca le offerte sul web e le salva con `yrols_save_offers`.
   Il Portale Offerte ARERA (`ilportaleofferte.it`) rifiuta le richieste dai server cloud (403 da GitHub Actions),

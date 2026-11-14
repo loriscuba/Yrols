@@ -83,6 +83,21 @@ CREATE TABLE IF NOT EXISTS reminders (
   done_at TEXT,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS suppliers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'altro',
+  status TEXT NOT NULL DEFAULT 'attivo',
+  monthly REAL,
+  direct_debit INTEGER,
+  customer_code TEXT,
+  contract_code TEXT,
+  website TEXT,
+  phone TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS email_suggestions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   message_id TEXT NOT NULL UNIQUE,
