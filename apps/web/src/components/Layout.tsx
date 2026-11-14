@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Bell, CalendarClock, Home, Landmark, LogOut, Mail, ReceiptText, Moon, Sun } from "lucide-react";
+import { Bell, CalendarClock, Home, Landmark, LogOut, Mail, ReceiptText, Moon, Sun, Repeat } from "lucide-react";
 import { supabase } from "../cloud";
 import { useEffect, useState } from "react";
 
 const NAV = [
   { to: "/", label: "Panoramica", icon: Home, end: true },
   { to: "/banche", label: "Banche", icon: Landmark },
+  { to: "/spese-previste", label: "Spese previste", icon: Repeat },
   { to: "/bollette", label: "Bollette", icon: ReceiptText },
   { to: "/scadenze", label: "Scadenze", icon: CalendarClock },
   { to: "/promemoria", label: "Promemoria", icon: Bell },

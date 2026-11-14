@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Bell, CalendarClock, KeyRound, Landmark, Mail, ReceiptText } from "lucide-react";
 import { useData } from "../hooks";
+import { currentMonth, useProjection } from "../projection";
 import type { Overview } from "../api";
 import { date, money, dateTime, label } from "../format";
 import { Card, DueBadge, Empty, ErrorBanner, Stat } from "../components/ui";
@@ -11,6 +12,8 @@ const AGENDA_LINK = { bill: "/bollette", deadline: "/scadenze", consent: "/banch
 
 export function OverviewPage() {
   const { data, error } = useData<Overview>("/overview");
+  const proj = useProjection();
+  const month = proj.project(currentMonth());
   const greeting = new Date().getHours() < 13 ? "Buongiorno" : new Date().getHours() < 18 ? "Buon pomeriggio" : "Buonasera";
 
   return (
@@ -29,12 +32,19 @@ export function OverviewPage() {
               {data.pendingEmail === 1 ? "1 bolletta o scadenza trovata nelle email" : `${data.pendingEmail} bollette o scadenze trovate nelle email`}: controlla e conferma
             </Link>
           )}
-          <div className="stats">
+          <div className={`stats ${month && month.expected > 0 ? "five" : ""}`}>
             <Stat label="Patrimonio sui conti" value={money(data.netWorth)} hint={`${data.accountsCount} ${data.accountsCount === 1 ? "conto" : "conti"}`} />
             <Stat label="Entrate ultimi 30 giorni" value={money(data.last30.income)} />
             <Stat label="Uscite ultimi 30 giorni" value={money(data.last30.expenses)} />
             <Stat label="Da pagare entro 30 giorni" value={money(data.billsDueTotal)}
               hint={data.overdueCount ? `${data.overdueCount} già scadute` : "Nessuna scaduta"} tone={data.overdueCount ? "critical" : undefined} />
+            {month && month.expected > 0 && (
+              <Link to="/spese-previste" className="stat stat-link">
+                <div className="stat-label">Spese ricorrenti</div>
+                <div className="stat-value">{money(month.expected)}</div>
+                <div className="stat-hint">{money(month.remaining)} da addebitare</div>
+              </Link>
+            )}
           </div>
 
           <div className="grid-2">

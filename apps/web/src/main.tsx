@@ -5,6 +5,7 @@ import "./styles.css";
 import { Layout } from "./components/Layout";
 import { AuthGate } from "./components/AuthGate";
 import { OverviewPage } from "./pages/Overview";
+import { ProjectionPage } from "./pages/Projection";
 import { BanksPage } from "./pages/Banks";
 import { BillsPage } from "./pages/Bills";
 import { DeadlinesPage } from "./pages/Deadlines";
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route element={<Layout />}>
           <Route index element={<OverviewPage />} />
           <Route path="banche" element={<BanksPage />} />
+          <Route path="spese-previste" element={<ProjectionPage />} />
           <Route path="bollette" element={<BillsPage />} />
           <Route path="scadenze" element={<DeadlinesPage />} />
           <Route path="promemoria" element={<RemindersPage />} />
