@@ -165,5 +165,36 @@ export async function cloudRequest<T>(method: string, fullPath: string, body?: u
     if (parts[3] === "dismiss") { ok(await sb.from("email_suggestions").update({ status: "dismissed" }).eq("id", Number(parts[2]))); return undefined as T; }
   }
 
+  if (parts[0] === "savings") {
+    if (method === "GET" && !parts[1]) {
+      const [offers, runs, profile, suppliers] = await Promise.all([
+        sb.from("saving_offers").select("id,category,provider,name,priceType:price_type,monthlyCost:monthly_cost,currentMonthly:current_monthly,currentProvider:current_provider,priceDetails:price_details,conditions,url,source,validUntil:valid_until,status,active,firstSeen:first_seen,lastSeen:last_seen")
+          .order("monthly_cost"),
+        sb.from("saving_runs").select("runAt:run_at,sources,summary,offersCount:offers_count").order("id", { ascending: false }).limit(1),
+        sb.from("saving_profile").select("kwhYear:kwh_year,smcYear:smc_year,powerKw:power_kw,resident,province,internetMinMbps:internet_min_mbps,mobileLines:mobile_lines,mobileGb:mobile_gb,notes,updatedAt:updated_at").maybeSingle(),
+        // Anagrafica fornitori: se la tabella non c'è ancora si ripiega sui pagamenti ricorrenti.
+        sb.from("suppliers").select("name,kind,monthly,status"),
+      ]);
+      return {
+        offers: num(ok(offers) as Record<string, unknown>[], ["monthlyCost", "currentMonthly"]),
+        lastRun: (ok(runs) as unknown[])[0] ?? null,
+        profile: num([ok(profile) as Record<string, unknown> ?? {}], ["kwhYear", "smcYear", "powerKw"])[0],
+        suppliers: suppliers.error ? null : num(suppliers.data as Record<string, unknown>[], ["monthly"]),
+      } as T;
+    }
+    if (method === "PATCH" && parts[1] === "offers") {
+      ok(await sb.from("saving_offers").update({ status: b.status }).eq("id", Number(parts[2])));
+      return undefined as T;
+    }
+    if (method === "PATCH" && parts[1] === "profile") {
+      const map: Record<string, string> = { kwhYear: "kwh_year", smcYear: "smc_year", powerKw: "power_kw", resident: "resident", province: "province",
+        internetMinMbps: "internet_min_mbps", mobileLines: "mobile_lines", mobileGb: "mobile_gb", notes: "notes" };
+      const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      for (const [k, c] of Object.entries(map)) if (k in b) row[c] = b[k] === "" ? null : b[k];
+      ok(await sb.from("saving_profile").update(row).eq("id", 1));
+      return undefined as T;
+    }
+  }
+
   throw new Error(`Richiesta non supportata online: ${method} ${path}`);
 }

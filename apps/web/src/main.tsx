@@ -12,6 +12,7 @@ import { DeadlinesPage } from "./pages/Deadlines";
 import { RemindersPage } from "./pages/Reminders";
 import { EmailPage } from "./pages/Email";
 import { SuppliersPage } from "./pages/Suppliers";
+import { SavingsPage } from "./pages/Savings";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -24,6 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="spese-previste" element={<ProjectionPage />} />
           <Route path="bollette" element={<BillsPage />} />
           <Route path="fornitori" element={<SuppliersPage />} />
+          <Route path="risparmio" element={<SavingsPage />} />
           <Route path="scadenze" element={<DeadlinesPage />} />
           <Route path="promemoria" element={<RemindersPage />} />
           <Route path="email" element={<EmailPage />} />
