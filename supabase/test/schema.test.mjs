@@ -150,3 +150,34 @@ test("fatture: niente doppioni tra PDF caricato e proposta email", async () => {
   const [a2a] = await as("authenticated", LORIS, "select invoice_number n, file_path f, source from yrols.bills where provider = 'A2A'");
   assert.deepEqual(a2a, { n: "A9", f: "email/a.pdf", source: "email" });
 });
+
+test("risparmio: offerte salvate dal controllo settimanale, stato conservato, solo membri", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  const offer = (o) => ({ category: "luce", provider: "Octopus Energy", name: "Flex", priceType: "variabile", monthlyCost: 41.5,
+    currentMonthly: 49.2, currentProvider: "Sorgenia", priceDetails: "PUN + 0,0088 €/kWh", url: "https://example.org/o", source: "Selectra", ...o });
+  const run1 = { sources: ["Selectra"], summary: "prova", offers: [offer({}), offer({ category: "internet", provider: "Iliad", name: "Box", monthlyCost: 24.99 })] };
+  const [{ r }] = await as("service_role", null, "select yrols.yrols_save_offers($1) r", [run1]);
+  assert.equal(r.offers, 2);
+  // Loris la segna come vista e nasconde quella internet.
+  await as("authenticated", LORIS, "update yrols.saving_offers set status = case category when 'luce' then 'vista' else 'nascosta' end");
+  // Settimana dopo controllo solo la luce: Octopus cala di prezzo (torna "nuova"), internet non controllata resta com'era.
+  const run2 = { sources: ["Selectra"], offers: [offer({ monthlyCost: 38 }), offer({ provider: "Edison", name: "Web Luce", monthlyCost: 45 })] };
+  await as("authenticated", LORIS, "select yrols.yrols_save_offers($1)", [run2]);
+  const rows = await as("authenticated", LORIS, "select category, provider, monthly_cost::float m, status, active from yrols.saving_offers order by id");
+  assert.deepEqual(rows, [
+    { category: "luce", provider: "Octopus Energy", m: 38, status: "nuova", active: true },
+    { category: "internet", provider: "Iliad", m: 24.99, status: "nascosta", active: true },
+    { category: "luce", provider: "Edison", m: 45, status: "nuova", active: true },
+  ]);
+  // Un controllo luce senza Edison la spegne.
+  await as("service_role", null, "select yrols.yrols_save_offers($1)", [{ offers: [offer({ monthlyCost: 38 })] }]);
+  assert.deepEqual((await as("authenticated", LORIS, "select active from yrols.saving_offers where provider = 'Edison'"))[0], { active: false });
+  // Profilo: una riga sola, modificabile ma non eliminabile.
+  await as("authenticated", LORIS, "update yrols.saving_profile set kwh_year = 2200");
+  await assert.rejects(as("authenticated", LORIS, "delete from yrols.saving_profile"));
+  await assert.rejects(as("authenticated", LORIS, "select yrols.yrols_save_offers($1)", [{ offers: [offer({ url: "http://x" })] }]));
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.saving_offers")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.saving_offers"));
+  await assert.rejects(as("anon", null, "select yrols.yrols_save_offers($1)", [run1]));
+});

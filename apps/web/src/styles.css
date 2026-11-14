@@ -241,3 +241,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .field input, .field select, .field textarea { min-width: 0; width: 100%; box-sizing: border-box; }
 .form > .banner { overflow-wrap: anywhere; }
 .modal-inner { overflow-x: hidden; }
+
+/* Risparmio */
+.savings-title { display: inline-flex; align-items: center; gap: 8px; }
+.savings-new { margin-left: 8px; vertical-align: 1px; }
+.savings-cost { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.savings-toggle { align-self: flex-start; }
+.list .row-sub { white-space: normal; }
+@media (max-width: 560px) {
+  .savings-cost .hint { font-size: 12px; }
+}
