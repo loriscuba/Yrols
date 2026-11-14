@@ -94,7 +94,7 @@ export function SavingsPage() {
                 {c.offers.length === 0 ? <p className="hint">Nessuna offerta trovata in questo controllo.</p> : (
                   <ul className="list">
                     {c.offers.slice(0, 5).map((o) => (
-                      <li key={o.id} className={`row ${o.status === "nascosta" ? "muted" : ""}`}>
+                      <li key={o.id} className={`row offer ${o.status === "nascosta" ? "muted" : ""}`}>
                         <span className="row-main">
                           <span className="row-title">{o.provider} · {o.name}{o.status === "nuova" && <span className="badge neutral savings-new">Nuova</span>}</span>
                           <span className="row-sub">

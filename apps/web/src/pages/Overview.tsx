@@ -60,8 +60,10 @@ export function OverviewPage() {
                         <Link to={AGENDA_LINK[a.type]} className="row-link">
                           <span className="row-icon"><Icon size={16} aria-hidden /></span>
                           <span className="row-main"><span className="row-title">{a.title}</span><span className="row-sub">{date(a.dueDate)}</span></span>
-                          {a.amount !== null && <span className="num">{money(a.amount)}</span>}
-                          <DueBadge date={a.dueDate} />
+                          <span className="row-end">
+                            {a.amount !== null && <span className="num">{money(a.amount)}</span>}
+                            <DueBadge date={a.dueDate} />
+                          </span>
                         </Link>
                       </li>
                     );

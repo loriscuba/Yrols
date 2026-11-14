@@ -69,21 +69,21 @@ export function BillsPage() {
       <Card title={<Segmented value={filter} onChange={setFilter} options={[["open", "Da pagare"], ["paid", "Pagate"], ["all", "Tutte"]]} />}>
         {list.length === 0 ? <Empty icon={<ReceiptText />} title={filter === "open" ? "Nessuna bolletta da pagare" : "Nessuna bolletta"} /> : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table stack-sm">
               <thead><tr><th>Fornitore</th><th className="hide-sm">Tipo</th><th>Scadenza</th><th className="right">Importo</th><th>Stato</th><th /></tr></thead>
               <tbody>
                 {list.map((b) => (
                   <tr key={b.id}>
-                    <td>
+                    <td className="c-main">
                       <div className="cell-title">{b.invoiceNumber || b.items?.length || b.filePath
                         ? <button className="link-btn" onClick={() => setDetail(b)}>{b.provider}</button> : b.provider}</div>
                       {(b.invoiceNumber || b.periodFrom) && <div className="cell-sub">{[b.invoiceNumber && `Fattura ${b.invoiceNumber}`, b.periodFrom && `${date(b.periodFrom)} – ${date(b.periodTo)}`].filter(Boolean).join(" · ")}</div>}
                     </td>
                     <td className="hide-sm">{label(b.kind)}</td>
-                    <td className="nowrap">{date(b.dueDate)}</td>
-                    <td className="right num">{money(b.amount)}</td>
-                    <td>{b.paidAt ? <DueBadge date={b.paidAt} done /> : <DueBadge date={b.dueDate} />}</td>
-                    <td className="actions">
+                    <td className="nowrap c-date">{date(b.dueDate)}</td>
+                    <td className="right num c-amt">{money(b.amount)}</td>
+                    <td className="c-state">{b.paidAt ? <DueBadge date={b.paidAt} done /> : <DueBadge date={b.dueDate} />}</td>
+                    <td className="actions c-act">
                       {b.paidAt
                         ? <button className="icon-btn" title="Segna da pagare" aria-label="Segna da pagare" onClick={() => act(api.patch(`/bills/${b.id}`, { paidAt: null }))}><Undo2 size={16} /></button>
                         : <button className="icon-btn" title="Segna pagata" aria-label="Segna pagata" onClick={() => act(api.patch(`/bills/${b.id}`, { paidAt: todayIso() }))}><Check size={16} /></button>}

@@ -67,10 +67,12 @@ export function ProjectionPage() {
                       <li key={r.key} className="row">
                         <span className="row-icon"><Repeat size={16} aria-hidden /></span>
                         <span className="row-main"><span className="row-title">{i.label}</span><span className="row-sub">{details}</span></span>
-                        <span className="num">{money(i.expected)}</span>
-                        {i.remaining > 0
-                          ? <span className="badge neutral"><Clock size={14} aria-hidden />{i.paid > 0 ? "Manca " + money(i.remaining) : date(i.nextDate, { day: "numeric", month: "short" })}</span>
-                          : <span className="badge good"><CheckCircle2 size={14} aria-hidden />Addebitato</span>}
+                        <span className="row-end">
+                          <span className="num">{money(i.expected)}</span>
+                          {i.remaining > 0
+                            ? <span className="badge neutral"><Clock size={14} aria-hidden />{i.paid > 0 ? "Manca " + money(i.remaining) : date(i.nextDate, { day: "numeric", month: "short" })}</span>
+                            : <span className="badge good"><CheckCircle2 size={14} aria-hidden />Addebitato</span>}
+                        </span>
                       </li>
                     );
                   })}
