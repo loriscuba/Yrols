@@ -43,7 +43,7 @@ export function DeadlinesPage() {
           <Card key={g} title={<span className={g === "Scadute" ? "tone-critical" : ""} style={{ textTransform: "capitalize" }}>{g}</span>}>
             <ul className="list">
               {items.map((d) => (
-                <li key={d.id} className="row">
+                <li key={d.id} className="row wrap-sm">
                   <button className={`check ${d.doneAt ? "on" : ""}`} aria-label={d.doneAt ? "Riapri" : "Segna completata"} title={d.doneAt ? "Riapri" : "Segna completata"}
                     onClick={() => act(api.patch(`/deadlines/${d.id}`, { doneAt: d.doneAt ? null : todayIso() }))}>
                     {d.doneAt ? <Undo2 size={14} /> : <Check size={14} />}
@@ -52,8 +52,10 @@ export function DeadlinesPage() {
                     <span className="row-title">{d.title}</span>
                     <span className="row-sub">{label(d.category)} · {date(d.dueDate)}{d.recurrence !== "none" && <> · <Repeat size={12} aria-hidden /> {label(d.recurrence)}</>}{d.notes && ` · ${d.notes}`}</span>
                   </span>
-                  {d.amount !== null && <span className="num">{money(d.amount)}</span>}
-                  <DueBadge date={d.dueDate} done={!!d.doneAt} />
+                  <span className="row-end">
+                    {d.amount !== null && <span className="num">{money(d.amount)}</span>}
+                    <DueBadge date={d.dueDate} done={!!d.doneAt} />
+                  </span>
                   <span className="actions">
                     <button className="icon-btn" aria-label="Modifica" title="Modifica" onClick={() => setEditing(d)}><Pencil size={16} /></button>
                     <button className="icon-btn" aria-label="Elimina" title="Elimina" onClick={() => confirm(`Eliminare "${d.title}"?`) && act(api.del(`/deadlines/${d.id}`))}><Trash2 size={16} /></button>
