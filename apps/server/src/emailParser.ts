@@ -49,7 +49,28 @@ const DEADLINE_RULES: [RegExp, string][] = [
   [/canone rai/i, "Canone RAI"],
   [/abbonamento.*(scad|rinnov)|(scad|rinnov).*abbonamento/i, "Rinnovo abbonamento"],
 ];
-const NOISE = /newsletter|offerta|promo|sconto|webinar|unsubscribe.*offert/i;
+const NOISE = /newsletter|offert|promo|sconto|buono|coupon|convenienza|webinar|unsubscribe.*offert|prenotazion|appuntamento|aggiornamento (?:del|sul) servizio|service update|termini|condizioni|novità|acquistal|scopri|vinci|regalo|cashback/i;
+// Mittenti di marketing: news.paypal.com, remind.facile.it, marketing@…, promo@…
+const NOISE_SENDER = /@(?:[\w-]+\.)*(?:news|newsletter|marketing|promo|promozioni|remind|offerte|info-?mail)\.|(?:^|[<\s"])(?:news|newsletter|marketing|promo|offerte)@/i;
+
+/** Pubblicità, newsletter e comunicazioni di servizio: si riconoscono da oggetto e mittente. */
+export const isNoise = (from: string, subject: string) => NOISE.test(subject) || NOISE_SENDER.test(from);
+
+/** Testo leggibile da una mail HTML: niente stili, script e tag. */
+export function htmlToText(html: string): string {
+  return html.replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&euro;/g, "€").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
+}
+
+/** Anteprima pulita: senza CSS rimasto nel testo, indirizzi web e link tra parentesi. */
+export function cleanSnippet(text: string, max = 240): string {
+  return text
+    .replace(/[^{}\n]{0,200}\{[^{}]*\}/g, " ")                          // regole CSS "body { … }"
+    .replace(/\[?\(?(?:https?:\/\/|www\.)[^\s)\]]+[)\]]?/gi, " ")         // URL, anche "(https://…)" e "[https://…]"
+    .replace(/\[\s*\]|\(\s*\)/g, " ")
+    .replace(/[*_]{1,2}([^*_]+)[*_]{1,2}/g, "$1")
+    .replace(/\s+/g, " ").trim().slice(0, max);
+}
 
 const MONTHS: Record<string, number> = {
   gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6,
@@ -91,7 +112,8 @@ function toIso(y: number, m: number, d: number) {
 const DATE_RE = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})|(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{4})/gi;
 const KEY_DUE = /(scadenz|scade|entro (il|e non oltre)?|da pagare entro|data (di )?addebito|verrà addebitat|pagare entro)/i;
 
-export function findDueDate(text: string): string | null {
+/** Data di scadenza; con onlyKeyed solo se preceduta da "scadenza", "entro il", "addebito"… */
+export function findDueDate(text: string, onlyKeyed = false): string | null {
   let fallback: string | null = null;
   for (const m of text.matchAll(DATE_RE)) {
     const iso = m[1] ? toIso(+m[3], +m[2], +m[1]) : toIso(+m[6], MONTHS[m[5].toLowerCase()], +m[4]);
@@ -100,7 +122,7 @@ export function findDueDate(text: string): string | null {
     if (KEY_DUE.test(before)) return iso;
     fallback ??= iso;
   }
-  return fallback;
+  return onlyKeyed ? null : fallback;
 }
 
 function senderName(from: string) {
@@ -113,11 +135,12 @@ function senderName(from: string) {
 export function parseEmail(e: ParsedEmail): Suggestion | null {
   const head = `${e.subject}\n${e.from}`;
   const all = `${e.subject}\n${e.text}`.replace(/ /g, " ");
-  if (NOISE.test(e.subject)) return null;
-  const snippet = e.text.replace(/\s+/g, " ").trim().slice(0, 240);
+  if (isNoise(e.from, e.subject)) return null;
+  const snippet = cleanSnippet(e.text);
 
   for (const [re, title] of DEADLINE_RULES) {
-    if (re.test(head) || (re.test(all) && /scad|rinnov|entro/i.test(all))) {
+    // Nell'oggetto basta la parola chiave; se compare solo nel testo serve una vera data di scadenza.
+    if (re.test(head) || (re.test(all) && findDueDate(all, true))) {
       return { kind: "deadline", provider: senderName(e.from), billKind: null, title, amount: findAmount(all), dueDate: findDueDate(all), snippet };
     }
   }
@@ -126,7 +149,8 @@ export function parseEmail(e: ParsedEmail): Suggestion | null {
   const known = PROVIDERS.find(([re]) => re.test(head)) ?? PROVIDERS.find(([re]) => re.test(all));
   const amount = findAmount(all);
   const dueDate = findDueDate(all);
-  if (amount === null && dueDate === null) return null;
+  // Una bolletta vera ha un importo, oppure è di un fornitore noto con una scadenza esplicita.
+  if (amount === null && !(known && findDueDate(all, true))) return null;
   const provider = known?.[1] ?? senderName(e.from);
   return {
     kind: "bill",

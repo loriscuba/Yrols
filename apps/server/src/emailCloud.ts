@@ -12,7 +12,7 @@
 import { createHash } from "node:crypto";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { imapConfigFromEnv, readMailbox } from "./email.ts";
-import type { ParsedEmail } from "./emailParser.ts";
+import { isNoise, type ParsedEmail } from "./emailParser.ts";
 import { readGmail } from "./gmail.ts";
 import { analyzeEmail } from "./invoiceEmail.ts";
 import type { GetDocument } from "./pdfText.ts";
@@ -60,8 +60,16 @@ async function rest(path: string, init: RequestInit = {}) {
   return res.status === 204 || res.status === 201 ? null : res.json();
 }
 
-const existing = (await rest("email_suggestions?select=message_id,status,amount,file_path")) as
-  { message_id: string; status: string; amount: number | null; file_path: string | null }[];
+const existing = (await rest("email_suggestions?select=message_id,status,amount,file_path,sender,subject")) as
+  { message_id: string; status: string; amount: number | null; file_path: string | null; sender: string; subject: string }[];
+// Proposte in attesa che con le regole attuali risultano pubblicità o avvisi: si archiviano come "ignorate".
+const dismiss = (messageId: string) => rest(`email_suggestions?message_id=eq.${encodeURIComponent(messageId)}&status=eq.pending`, {
+  method: "PATCH", body: JSON.stringify({ status: "dismissed" }), headers: { Prefer: "return=minimal" },
+});
+let dismissed = 0;
+for (const r of existing) {
+  if (r.status === "pending" && isNoise(r.sender ?? "", r.subject ?? "")) { await dismiss(r.message_id); r.status = "dismissed"; dismissed++; }
+}
 // Proposte ancora da confermare senza importo né PDF letto: si rileggono, magari ora il PDF allegato dà l'importo.
 const retry = new Set(existing.filter((r) => r.status === "pending" && r.amount === null && !r.file_path).map((r) => r.message_id));
 const seen = new Set(existing.map((r) => r.message_id).filter((id) => !retry.has(id)));
@@ -80,7 +88,10 @@ const rows: Record<string, unknown>[] = [];
 for await (const { messageId, email } of source(seen)) {
   scanned++;
   const s = await analyzeEmail(email, readPdf);
-  if (!s) continue;
+  if (!s) {
+    if (retry.has(messageId)) { await dismiss(messageId); dismissed++; } // riletta: non è una bolletta
+    continue;
+  }
   if (retry.has(messageId) && s.amount === null) continue; // niente di nuovo rispetto a prima
   const filePath = s.pdf ? await uploadPdf(messageId, s.pdf.content) : null;
   if (filePath) pdfs++;
@@ -103,6 +114,6 @@ if (rows.length) {
   });
 }
 const now = new Date().toISOString();
-await rest("bank_syncs", { method: "POST", body: JSON.stringify({ source: "email", synced_at: now, summary: { scanned, found: rows.length, completed, pdfs, skipped: [...skipped.values()].reduce((a, b) => a + b, 0) } }), headers: { Prefer: "return=minimal" } });
-console.log(`Email lette: ${scanned}, nuove proposte: ${rows.length}, proposte completate: ${completed}, PDF letti: ${pdfs}`);
+await rest("bank_syncs", { method: "POST", body: JSON.stringify({ source: "email", synced_at: now, summary: { scanned, found: rows.length, completed, dismissed, pdfs, skipped: [...skipped.values()].reduce((a, b) => a + b, 0) } }), headers: { Prefer: "return=minimal" } });
+console.log(`Email lette: ${scanned}, nuove proposte: ${rows.length}, proposte completate: ${completed}, ignorate: ${dismissed}, PDF letti: ${pdfs}`);
 for (const [why, n] of skipped) console.log(`Saltate ${n} email, si riprova alla prossima lettura: ${why}`);

@@ -2,7 +2,7 @@
  * Fatture dai PDF allegati alle email: legge ogni PDF e unisce i dati trovati con quelli del testo della mail.
  * I dati del PDF hanno la precedenza (sono quelli ufficiali della fattura).
  */
-import { parseEmail, type ParsedEmail, type PdfAttachment, type Suggestion } from "./emailParser.ts";
+import { cleanSnippet, parseEmail, type ParsedEmail, type PdfAttachment, type Suggestion } from "./emailParser.ts";
 import { isF24, looksLikeInvoice, parseInvoice, type Invoice } from "./invoiceParser.ts";
 import { pdfToText, type GetDocument } from "./pdfText.ts";
 
@@ -27,7 +27,7 @@ export async function analyzeEmail(e: ParsedEmail, getDocument: GetDocument): Pr
     return {
       kind: f24 ? "deadline" : "bill", provider, billKind: inv.kind ?? fromBody?.billKind ?? "altro",
       title: f24 ? [provider ?? "Pagamento F24", year].filter(Boolean).join(" ") : `Bolletta ${provider ?? ""}`.trim(),
-      amount: inv.amount, dueDate: inv.dueDate ?? fromBody?.dueDate ?? null, snippet: fromBody?.snippet ?? e.text.replace(/\s+/g, " ").trim().slice(0, 240),
+      amount: inv.amount, dueDate: inv.dueDate ?? fromBody?.dueDate ?? null, snippet: fromBody?.snippet ?? cleanSnippet(e.text),
       invoiceNumber: inv.invoiceNumber, issueDate: inv.issueDate, periodFrom: inv.periodFrom, periodTo: inv.periodTo,
       items: inv.items.length ? inv.items : null, pdf,
     };
