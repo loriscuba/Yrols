@@ -39,7 +39,8 @@ async function gmailToken(): Promise<string | null> {
 
 let source: (seen: Set<string>) => AsyncGenerator<{ messageId: string; email: ParsedEmail }>;
 const token = await gmailToken();
-if (token) source = (seen) => readGmail(token, { sinceDays, maxMessages }, seen);
+const skipped = new Map<string, number>();
+if (token) source = (seen) => readGmail(token, { sinceDays, maxMessages, onSkip: (e) => skipped.set(e.message, (skipped.get(e.message) ?? 0) + 1) }, seen);
 else if (cfg) source = (seen) => readMailbox(cfg, seen);
 else { console.log("Nessuna casella collegata (Gmail dal cruscotto o secret YROLS_IMAP_*): niente da fare."); process.exit(0); }
 
@@ -83,5 +84,6 @@ if (rows.length) {
   });
 }
 const now = new Date().toISOString();
-await rest("bank_syncs", { method: "POST", body: JSON.stringify({ source: "email", synced_at: now, summary: { scanned, found: rows.length, pdfs } }), headers: { Prefer: "return=minimal" } });
+await rest("bank_syncs", { method: "POST", body: JSON.stringify({ source: "email", synced_at: now, summary: { scanned, found: rows.length, pdfs, skipped: [...skipped.values()].reduce((a, b) => a + b, 0) } }), headers: { Prefer: "return=minimal" } });
 console.log(`Email lette: ${scanned}, nuove proposte: ${rows.length}, fatture PDF: ${pdfs}`);
+for (const [why, n] of skipped) console.log(`Saltate ${n} email, si riprova alla prossima lettura: ${why}`);
