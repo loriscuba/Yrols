@@ -78,7 +78,7 @@ test("TARI: importo dal modello F24 allegato, scadenza dalla mail", async () => 
     [40, 600, "SALDO FINALE"], [200, 600, "EURO +"], [300, 600, "301,77"],
   ]);
   const s = await analyzeEmail({ ...tariMail, pdfs: [{ filename: "F24.pdf", content: f24 }] }, getDocument as unknown as GetDocument);
-  assert.deepEqual([s?.kind, s?.provider, s?.billKind, s?.amount, s?.dueDate, s?.pdf?.filename], ["bill", "TARI", "rifiuti", 301.77, "2026-12-02", "F24.pdf"]);
+  assert.deepEqual([s?.kind, s?.title, s?.provider, s?.billKind, s?.amount, s?.dueDate, s?.pdf?.filename], ["deadline", "TARI 2026", "TARI", "rifiuti", 301.77, "2026-12-02", "F24.pdf"]);
 });
 
 test("F24 compilabile: importi nei campi del modulo", async () => {
