@@ -21,8 +21,12 @@ export async function analyzeEmail(e: ParsedEmail, getDocument: GetDocument): Pr
     if (fromBody?.dueDate && inv.amount !== null && isF24(text)) inv.dueDate = fromBody.dueDate;
     if (!looksLikeInvoice(inv, text)) continue;
     const provider = inv.provider ?? fromBody?.provider ?? null;
+    // Un F24 (TARI, IMU…) è una tassa: va tra le Scadenze, non tra le bollette dei fornitori.
+    const f24 = isF24(text);
+    const year = f24 ? text.match(/\b(?:39\d\d|TEFA)\b.*?\b(20\d\d)\b/)?.[1] : undefined;
     return {
-      kind: "bill", provider, billKind: inv.kind ?? fromBody?.billKind ?? "altro", title: `Bolletta ${provider ?? ""}`.trim(),
+      kind: f24 ? "deadline" : "bill", provider, billKind: inv.kind ?? fromBody?.billKind ?? "altro",
+      title: f24 ? [provider ?? "Pagamento F24", year].filter(Boolean).join(" ") : `Bolletta ${provider ?? ""}`.trim(),
       amount: inv.amount, dueDate: inv.dueDate ?? fromBody?.dueDate ?? null, snippet: fromBody?.snippet ?? e.text.replace(/\s+/g, " ").trim().slice(0, 240),
       invoiceNumber: inv.invoiceNumber, issueDate: inv.issueDate, periodFrom: inv.periodFrom, periodTo: inv.periodTo,
       items: inv.items.length ? inv.items : null, pdf,
