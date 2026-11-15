@@ -102,7 +102,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .row-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--neutral-soft); color: var(--text-secondary); flex: none; }
 .row-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .row-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row-sub { color: var(--text-muted); font-size: 13px; display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.row-sub { color: var(--text-muted); font-size: 13px; display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
 .num { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 500; }
 .num.pos { color: var(--good); }
 .actions { display: inline-flex; gap: 2px; justify-content: flex-end; white-space: nowrap; }
@@ -187,9 +187,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 /* Email suggestions */
-.suggestion { padding: 6px 0 12px; }
-.snippet { margin: 0 0 10px 44px; color: var(--text-muted); font-size: 13px; }
-.suggestion-form { display: grid; grid-template-columns: 1fr 120px 160px auto auto; gap: 8px; margin-left: 44px; }
+.suggestion { padding: 6px 0 12px; min-width: 0; }
+/* Le anteprime delle email possono contenere indirizzi lunghissimi: vanno a capo e restano su 3 righe. */
+.snippet { margin: 0 0 10px 44px; color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.suggestion-form { display: grid; grid-template-columns: minmax(0, 1fr) 120px 160px auto auto; gap: 8px; margin-left: 44px; }
+.suggestion-form > * { min-width: 0; }
 
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -220,7 +223,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   .page { padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); gap: 14px; }
   .grid-2 { grid-template-columns: 1fr; }
   .hide-sm { display: none; }
-  .quick-add, .suggestion-form { grid-template-columns: 1fr 1fr; margin-left: 0; }
+  .quick-add, .suggestion-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-left: 0; }
   .quick-add input:first-child, .suggestion-form input:first-child { grid-column: 1 / -1; }
   .snippet { margin-left: 0; }
   .hbars li { grid-template-columns: 90px 1fr 84px; }
