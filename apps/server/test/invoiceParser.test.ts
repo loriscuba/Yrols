@@ -68,3 +68,9 @@ test("righe del PDF ricostruite dalle posizioni", () => {
   assert.deepEqual(linesFromItems([it("€ 42,19", 300, 700), it("Totale da Pagare", 100, 701), it("Data di Scadenza", 100, 680), it("25 Nov 2026", 300, 680)]),
     ["Totale da Pagare   € 42,19", "Data di Scadenza   25 Nov 2026"]);
 });
+
+test("avviso TARI: importo totale dovuto e rata unica", () => {
+  const inv = parseInvoice("AVVISO DI PAGAMENTO TARI 2026\nImporto totale dovuto   € 312,00\nRata unica scadenza 02/12/2026   312,00");
+  assert.equal(inv.amount, 312);
+  assert.equal(inv.dueDate, "2026-12-02");
+});

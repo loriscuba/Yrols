@@ -3,7 +3,7 @@
  * I dati del PDF hanno la precedenza (sono quelli ufficiali della fattura).
  */
 import { parseEmail, type ParsedEmail, type PdfAttachment, type Suggestion } from "./emailParser.ts";
-import { looksLikeInvoice, parseInvoice, type Invoice } from "./invoiceParser.ts";
+import { isF24, looksLikeInvoice, parseInvoice, type Invoice } from "./invoiceParser.ts";
 import { pdfToText, type GetDocument } from "./pdfText.ts";
 
 export interface EmailInvoice extends Suggestion {
@@ -14,9 +14,11 @@ export interface EmailInvoice extends Suggestion {
 export async function analyzeEmail(e: ParsedEmail, getDocument: GetDocument): Promise<EmailInvoice | null> {
   const fromBody = parseEmail(e);
   for (const pdf of e.pdfs ?? []) {
-    let inv: Invoice;
-    try { inv = parseInvoice(await pdfToText(getDocument, pdf.content.slice())); } catch { continue; } // PDF illeggibile o protetto
-    if (!looksLikeInvoice(inv)) continue;
+    let inv: Invoice, text: string;
+    try { text = await pdfToText(getDocument, pdf.content.slice()); inv = parseInvoice(text); } catch { continue; } // PDF illeggibile o protetto
+    // Un F24 non ha scadenza scritta sopra: vale quella della mail ("rata unica con scadenza 02/12/2026").
+    if (!inv.dueDate && fromBody?.dueDate && inv.amount !== null && isF24(text)) inv.dueDate = fromBody.dueDate;
+    if (!looksLikeInvoice(inv, text)) continue;
     const provider = inv.provider ?? fromBody?.provider ?? null;
     return {
       kind: "bill", provider, billKind: inv.kind ?? fromBody?.billKind ?? "altro", title: `Bolletta ${provider ?? ""}`.trim(),

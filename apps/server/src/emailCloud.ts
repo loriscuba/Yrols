@@ -16,6 +16,14 @@ import type { ParsedEmail } from "./emailParser.ts";
 import { readGmail } from "./gmail.ts";
 import { analyzeEmail } from "./invoiceEmail.ts";
 import type { GetDocument } from "./pdfText.ts";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+
+// Mappe dei caratteri e font standard di pdf.js: senza, i PDF con font CID (molti moduli F24) danno testo vuoto.
+const pdfjsDir = dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json"));
+const readPdf: GetDocument = (src) => (getDocument as unknown as GetDocument)({
+  ...src, cMapUrl: join(pdfjsDir, "cmaps") + "/", cMapPacked: true, standardFontDataUrl: join(pdfjsDir, "standard_fonts") + "/",
+});
 
 const url = process.env.SUPABASE_URL?.replace(/\/+$/, "");
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -52,8 +60,11 @@ async function rest(path: string, init: RequestInit = {}) {
   return res.status === 204 || res.status === 201 ? null : res.json();
 }
 
-const existing = (await rest("email_suggestions?select=message_id")) as { message_id: string }[];
-const seen = new Set(existing.map((r) => r.message_id));
+const existing = (await rest("email_suggestions?select=message_id,status,amount,file_path")) as
+  { message_id: string; status: string; amount: number | null; file_path: string | null }[];
+// Proposte ancora da confermare senza importo né PDF letto: si rileggono, magari ora il PDF allegato dà l'importo.
+const retry = new Set(existing.filter((r) => r.status === "pending" && r.amount === null && !r.file_path).map((r) => r.message_id));
+const seen = new Set(existing.map((r) => r.message_id).filter((id) => !retry.has(id)));
 /** Carica il PDF nel bucket privato; il nome è un hash del messaggio (niente dati personali nel percorso). */
 async function uploadPdf(messageId: string, content: Uint8Array): Promise<string | null> {
   const path = `email/${createHash("sha256").update(messageId).digest("hex").slice(0, 32)}.pdf`;
@@ -64,19 +75,27 @@ async function uploadPdf(messageId: string, content: Uint8Array): Promise<string
   return res.ok ? path : null;
 }
 
-let scanned = 0, pdfs = 0;
+let scanned = 0, pdfs = 0, completed = 0;
 const rows: Record<string, unknown>[] = [];
 for await (const { messageId, email } of source(seen)) {
   scanned++;
-  const s = await analyzeEmail(email, getDocument as unknown as GetDocument);
+  const s = await analyzeEmail(email, readPdf);
   if (!s) continue;
+  if (retry.has(messageId) && s.amount === null) continue; // niente di nuovo rispetto a prima
   const filePath = s.pdf ? await uploadPdf(messageId, s.pdf.content) : null;
   if (filePath) pdfs++;
-  rows.push({
-    message_id: messageId, sender: email.from, subject: email.subject, received_at: email.date?.toISOString() ?? null,
+  const fields = {
     kind: s.kind, provider: s.provider, bill_kind: s.billKind, title: s.title, amount: s.amount, due_date: s.dueDate, snippet: s.snippet,
     invoice_number: s.invoiceNumber, issue_date: s.issueDate, period_from: s.periodFrom, period_to: s.periodTo, items: s.items, file_path: filePath,
-  });
+  };
+  if (retry.has(messageId)) {
+    await rest(`email_suggestions?message_id=eq.${encodeURIComponent(messageId)}&status=eq.pending`, {
+      method: "PATCH", body: JSON.stringify(fields), headers: { Prefer: "return=minimal" },
+    });
+    completed++;
+    continue;
+  }
+  rows.push({ message_id: messageId, sender: email.from, subject: email.subject, received_at: email.date?.toISOString() ?? null, ...fields });
 }
 if (rows.length) {
   await rest("email_suggestions?on_conflict=message_id", {
@@ -84,6 +103,6 @@ if (rows.length) {
   });
 }
 const now = new Date().toISOString();
-await rest("bank_syncs", { method: "POST", body: JSON.stringify({ source: "email", synced_at: now, summary: { scanned, found: rows.length, pdfs, skipped: [...skipped.values()].reduce((a, b) => a + b, 0) } }), headers: { Prefer: "return=minimal" } });
-console.log(`Email lette: ${scanned}, nuove proposte: ${rows.length}, fatture PDF: ${pdfs}`);
+await rest("bank_syncs", { method: "POST", body: JSON.stringify({ source: "email", synced_at: now, summary: { scanned, found: rows.length, completed, pdfs, skipped: [...skipped.values()].reduce((a, b) => a + b, 0) } }), headers: { Prefer: "return=minimal" } });
+console.log(`Email lette: ${scanned}, nuove proposte: ${rows.length}, proposte completate: ${completed}, PDF letti: ${pdfs}`);
 for (const [why, n] of skipped) console.log(`Saltate ${n} email, si riprova alla prossima lettura: ${why}`);

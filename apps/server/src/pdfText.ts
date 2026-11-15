@@ -4,8 +4,9 @@
  * pdf.js si passa da fuori: nel browser il build standard con il worker, in Node il build "legacy".
  */
 interface TextItem { str?: string; transform?: number[]; width?: number }
-interface PdfDoc { numPages: number; getPage(n: number): Promise<{ getTextContent(): Promise<{ items: unknown[] }> }>; destroy?(): Promise<void> }
-export type GetDocument = (src: { data: Uint8Array; isEvalSupported?: boolean; useSystemFonts?: boolean }) => { promise: Promise<PdfDoc> };
+interface PdfPage { getTextContent(): Promise<{ items: unknown[] }>; getAnnotations?(): Promise<{ fieldValue?: unknown; fieldName?: string }[]> }
+interface PdfDoc { numPages: number; getPage(n: number): Promise<PdfPage>; destroy?(): Promise<void> }
+export type GetDocument = (src: { data: Uint8Array; isEvalSupported?: boolean; useSystemFonts?: boolean; cMapUrl?: string; cMapPacked?: boolean; standardFontDataUrl?: string }) => { promise: Promise<PdfDoc> };
 
 export function linesFromItems(items: unknown[]): string[] {
   const rows: { y: number; parts: { x: number; s: string; w: number }[] }[] = [];
@@ -36,6 +37,11 @@ export async function pdfToText(getDocument: GetDocument, data: Uint8Array, maxP
     for (let p = 1; p <= Math.min(doc.numPages, maxPages); p++) {
       const page = await doc.getPage(p);
       out.push(...linesFromItems((await page.getTextContent()).items));
+      // Moduli compilabili (es. F24 del Comune): i valori stanno nei campi, non nel testo della pagina.
+      const fields = (await page.getAnnotations?.().catch(() => []) ?? [])
+        .filter((a) => typeof a.fieldValue === "string" && a.fieldValue.trim())
+        .map((a) => `${a.fieldName ?? ""}   ${String(a.fieldValue).trim()}`.trim());
+      if (fields.length) out.push(...fields);
     }
     return out.join("\n");
   } finally {
