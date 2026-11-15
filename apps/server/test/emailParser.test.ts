@@ -62,3 +62,18 @@ test("anteprima leggibile: niente CSS, link e HTML", () => {
   const s = cleanSnippet("td { padding: 0 } Accedi (https://example.com/a/very/long/path?token=abcdefghijklmnopqrstuvwxyz0123456789) e **paga** entro il 16/11/2026 [https://example.com/x]");
   assert.equal(s, "Accedi e paga entro il 16/11/2026");
 });
+
+test("ordini online, consegne e annunci non sono bollette", () => {
+  const cases: [string, string, string][] = [
+    ["Amazon.it <conferma-ordine@amazon.example>", "Ordinato: lampada da tavolo", "Totale ordine € 24,90. Fattura disponibile nel tuo account."],
+    ["Negozio <ordini@negozio.example>", "Il tuo pacco è in consegna", "Importo addebitato € 12,00"],
+    ["Portale case <alert@notifiche.immobiliare.it>", "1 nuovo annuncio per la tua ricerca", "Villa, € 350.000, rata mutuo da € 1.200"],
+    ["Biglietti <servizio@ticketone.example>", "Conferma di Acquisto - ID Ordine 123", "Totale € 73,84, addebito sulla carta"],
+    ["Autore <autore@substack.com>", "Un caffè con l'autrice", "Abbonamento € 5,00 al mese, rata annuale"],
+    ["Bottega <info@bottega.example>", "Grazie per il tuo acquisto", "Fattura n. 12, totale € 30,00"],
+  ];
+  for (const [from, subject, text] of cases) assert.equal(parseEmail({ from, subject, text }), null, subject);
+  const ok = parseEmail({ from: "Studio Rossi <studio@rossi.example>", subject: "Fattura n. 45 ottobre", text: "Importo da pagare € 122,00 entro il 30/11/2026" });
+  assert.equal(ok?.kind, "bill");
+  assert.equal(ok?.amount, 122);
+});
