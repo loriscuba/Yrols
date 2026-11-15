@@ -65,7 +65,7 @@ const TOTAL_LABELS = [
   /saldo\s+finale/, /totale\s+da\s+pagare/, /importo\s+da\s+pagare/, /totale\s+(?:della\s+)?(?:fattura|bolletta|documento|conto)/, /da\s+pagare/, /totale\s+dovuto/,
   /importo\s+(?:totale|complessivo)(?:\s+dovuto)?/, /importo\s+(?:della\s+)?rata\s+unica/, /rata\s+unica/, /totale\s+avviso/,
 ];
-const DUE_LABELS = [/data\s+(?:di\s+)?scadenza/, /scadenza\s+(?:pagamento|fattura|bolletta)?/, /(?:da\s+pagare|pagare)\s+entro(?:\s+il)?/, /entro\s+il/];
+const DUE_LABELS = [/data\s+(?:di\s+)?scadenza/, /\bscad\.?(?=\s)/, /scadenza\s+(?:pagamento|fattura|bolletta)?/, /(?:da\s+pagare|pagare)\s+entro(?:\s+il)?/, /entro\s+il/];
 const ISSUE_LABELS = [/emessa\s+il/, /data\s+(?:di\s+)?emissione/, /data\s+fattura/, /fattura\s+(?:n\.?|nr\.?|numero)\s*\S+\s+del/];
 
 export function parseInvoice(text: string): Invoice {
@@ -117,7 +117,10 @@ export function parseInvoice(text: string): Invoice {
   };
 }
 
-export const isF24 = (t: string) => /\bF24\b|modello\s+di\s+pagamento\s+unificato|delega\s+irrevocabile/i.test(t);
+// Riga della sezione tributi locali di un F24: "EL   3944   H123 ... 2026   220 60" (anche senza la scritta F24,
+// quando il modulo è un'immagine di sfondo e il PDF contiene solo i valori stampati sopra).
+const F24_ROW = /^(?:E\s*L|E\s*R|R\s*G)\s+(?:39\d\d|TEFA|365[0-9])\b/im;
+export const isF24 = (t: string) => /\bF24\b|modello\s+di\s+pagamento\s+unificato|delega\s+irrevocabile/i.test(t) || F24_ROW.test(t);
 
 /** Codici tributo più comuni per la casa: TARI (3944/3950/TEFA TEFA), IMU (3912-3930). */
 function f24Tax(t: string): [string, string] | null {
@@ -132,7 +135,20 @@ function f24Amount(t: string): number | null {
     const v = amountAfter(t, l, 80);
     if (v !== null && v > 0) return v;
   }
-  return null;
+  // Valori stampati nelle caselle del modulo: euro e centesimi separati da uno spazio ("231 60").
+  // Il totale è la riga con il solo importo; altrimenti si sommano gli importi delle righe tributo.
+  const boxed = (s: string) => { const m = s.match(/^(\d{1,3}(?:\.?\d{3})*) (\d{2})$/); return m ? Number(m[1]!.replace(/\./g, "")) + Number(m[2]) / 100 : null; };
+  const lines = t.split("\n").map((l) => l.trim());
+  for (const l of lines) { const v = boxed(l); if (v) return Math.round(v * 100) / 100; }
+  let sum = 0;
+  const seenRows = new Set<string>();
+  for (const l of lines) {
+    if (!F24_ROW.test(l) || seenRows.has(l)) continue; // il modulo ha due copie identiche (banca e contribuente)
+    seenRows.add(l);
+    const m = l.match(/\s(\d{1,3}(?:\.?\d{3})*)\s(\d{2})$/);
+    if (m) sum += Number(m[1]!.replace(/\./g, "")) + Number(m[2]) / 100;
+  }
+  return sum > 0 ? Math.round(sum * 100) / 100 : null;
 }
 
 /** true se il testo sembra davvero una fattura/bolletta (e non, per esempio, un volantino). */

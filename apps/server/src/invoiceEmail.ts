@@ -16,8 +16,9 @@ export async function analyzeEmail(e: ParsedEmail, getDocument: GetDocument): Pr
   for (const pdf of e.pdfs ?? []) {
     let inv: Invoice, text: string;
     try { text = await pdfToText(getDocument, pdf.content.slice()); inv = parseInvoice(text); } catch { continue; } // PDF illeggibile o protetto
-    // Un F24 non ha scadenza scritta sopra: vale quella della mail ("rata unica con scadenza 02/12/2026").
-    if (!inv.dueDate && fromBody?.dueDate && inv.amount !== null && isF24(text)) inv.dueDate = fromBody.dueDate;
+    // Per un F24 vale la scadenza scritta nella mail ("rata unica con scadenza 02/12/2026"): il Comune spesso
+    // rimanda lo stesso modulo con una data aggiornata. Se la mail non la dice, si usa quella del modulo.
+    if (fromBody?.dueDate && inv.amount !== null && isF24(text)) inv.dueDate = fromBody.dueDate;
     if (!looksLikeInvoice(inv, text)) continue;
     const provider = inv.provider ?? fromBody?.provider ?? null;
     return {

@@ -87,3 +87,18 @@ test("F24 compilabile: importi nei campi del modulo", async () => {
   const s = await analyzeEmail({ ...tariMail, pdfs: [{ filename: "F24.pdf", content: f24 }] }, getDocument as unknown as GetDocument);
   assert.deepEqual([s?.provider, s?.amount, s?.dueDate], ["TARI", 156, "2026-12-02"]);
 });
+
+test("F24 con il modulo come immagine: importi nelle caselle (euro e centesimi separati)", async () => {
+  // Dati inventati, con la stessa struttura del PDF che manda un Comune: solo i valori stampati sopra il modulo.
+  const f24 = tinyPdf([
+    [40, 800, "TARI RATA UNICA - SCAD 21/08/2026"],
+    [40, 700, "E"], [55, 700, "L"], [90, 700, "3944"], [150, 700, "Z 9 9 9"], [250, 700, "2026"], [400, 700, "150 40"],
+    [40, 680, "E"], [55, 680, "L"], [90, 680, "TEFA"], [150, 680, "Z 9 9 9"], [250, 680, "2026"], [400, 680, "7 50"],
+    [400, 650, "157 90"],
+  ]);
+  const withMailDate = await analyzeEmail({ ...tariMail, pdfs: [{ filename: "F24.pdf", content: f24 }] }, getDocument as unknown as GetDocument);
+  assert.deepEqual([withMailDate?.provider, withMailDate?.billKind, withMailDate?.amount, withMailDate?.dueDate], ["TARI", "rifiuti", 157.9, "2026-12-02"]);
+  const pdfOnly = await analyzeEmail({ from: "tributi@comune.example.it", subject: "TARI", text: "In allegato il modello.", pdfs: [{ filename: "F24.pdf", content: f24 }] },
+    getDocument as unknown as GetDocument);
+  assert.deepEqual([pdfOnly?.amount, pdfOnly?.dueDate], [157.9, "2026-08-21"]);
+});
