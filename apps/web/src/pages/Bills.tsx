@@ -4,6 +4,7 @@ import { useData } from "../hooks";
 import { api, type Bill, type Meta } from "../api";
 import { cloudEnabled, uploadInvoicePdf } from "../cloud";
 import { readInvoicePdf } from "../invoice";
+import { billParts } from "../../../server/src/billParts.ts";
 import { date, label, money, todayIso } from "../format";
 import { Card, DueBadge, Empty, ErrorBanner, Field, Modal, Segmented, Stat } from "../components/ui";
 
@@ -77,9 +78,10 @@ export function BillsPage() {
                     <td className="c-main">
                       <div className="cell-title">{b.invoiceNumber || b.items?.length || b.filePath
                         ? <button className="link-btn" onClick={() => setDetail(b)}>{b.provider}</button> : b.provider}</div>
+                      {billParts(b).length > 0 && <div className="cell-sub">{billParts(b).map((p) => `${p.label} ${money(p.amount)}`).join(" · ")}</div>}
                       {(b.invoiceNumber || b.periodFrom) && <div className="cell-sub">{[b.invoiceNumber && `Fattura ${b.invoiceNumber}`, b.periodFrom && `${date(b.periodFrom)} – ${date(b.periodTo)}`].filter(Boolean).join(" · ")}</div>}
                     </td>
-                    <td className="hide-sm">{label(b.kind)}</td>
+                    <td className="hide-sm">{billParts(b).length ? "Internet e telefonia" : label(b.kind)}</td>
                     <td className="nowrap c-date">{date(b.dueDate)}</td>
                     <td className="right num c-amt">{money(b.amount)}</td>
                     <td className="c-state">{b.paidAt ? <DueBadge date={b.paidAt} done /> : <DueBadge date={b.dueDate} />}</td>
@@ -131,6 +133,11 @@ function InvoiceDetail({ bill: b, onClose, onError }: { bill: Bill; onClose: () 
           <table className="table">
             <thead><tr><th>Voce</th><th className="right">IVA</th><th className="right">Importo</th></tr></thead>
             <tbody>{b.items.map((i, n) => <tr key={n}><td>{i.description}</td><td className="right">{i.vat !== null ? `${i.vat}%` : ""}</td><td className="right num">{money(i.amount)}</td></tr>)}</tbody>
+            {billParts(b).length > 0 && (
+              <tfoot>{billParts(b).map((p) => (
+                <tr key={p.part}><th>{p.label}{Math.abs(p.monthly - p.amount) >= 0.01 ? <span className="hint"> · di solito {money(p.monthly)} al mese</span> : null}</th><td /><td className="right num"><strong>{money(p.amount)}</strong></td></tr>
+              ))}</tfoot>
+            )}
           </table>
         </div>
       )}

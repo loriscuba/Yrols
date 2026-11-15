@@ -20,9 +20,9 @@ test("spesa attuale: prima il controllo, poi i fornitori, poi i movimenti", () =
   const rec = [{ label: "FASTWEB SpA", monthly: 37.9 }, { label: "Sorgenia S.p.A.", monthly: 103.67 }, { label: "Amazon Prime", monthly: 4.99 }];
   const offers = [offer({ currentMonthly: 52.1, currentProvider: "Sorgenia" })];
   assert.deepEqual(currentSpend(offers, null, rec), [
-    { category: "luce", provider: "Sorgenia", monthly: 52.1, from: "controllo" },
-    { category: "internet", provider: "FASTWEB SpA", monthly: 37.9, from: "movimenti" },
-    { category: "abbonamenti", provider: "Amazon Prime", monthly: 4.99, from: "movimenti" },
+    { category: "luce", provider: "Sorgenia", monthly: 52.1, from: "controllo", lines: [{ provider: "Sorgenia", monthly: 52.1 }] },
+    { category: "internet", provider: "FASTWEB SpA", monthly: 37.9, from: "movimenti", lines: [{ provider: "FASTWEB SpA", monthly: 37.9 }] },
+    { category: "abbonamenti", provider: "Amazon Prime", monthly: 4.99, from: "movimenti", lines: [{ provider: "Amazon Prime", monthly: 4.99 }] },
   ]);
   // Con l'anagrafica fornitori i movimenti non si contano due volte; i fornitori nascosti si ignorano.
   const sup = [{ name: "Fastweb", kind: "internet", monthly: 37.9 }, { name: "Iliad", kind: "telefono", monthly: 9.99, status: "nascosto" }];
@@ -60,4 +60,22 @@ test("promo del primo periodo: l'ordine e il risparmio contano il prezzo a regim
     ["Beactive", 12, 206.4],
   ]);
   assert.equal(internet.monthlySaving, 16.9);
+});
+
+test("bolletta scorporata: internet di casa e SIM dello stesso fornitore si confrontano separatamente", () => {
+  // Il controllo aveva confrontato tutto il conto Fastweb (37,90) con la fibra e la SIM Iliad (11,25) con il mobile.
+  const offers = [
+    offer({ id: 1, category: "internet", provider: "Iliad", monthlyCost: 24.99, currentMonthly: 37.9, currentProvider: "Fastweb" }),
+    offer({ id: 2, category: "telefono", provider: "Ho. Mobile", monthlyCost: 6.99, currentMonthly: 11.25, currentProvider: "Iliad" }),
+  ];
+  const sup = [{ name: "Fastweb", kind: "internet", monthly: 37.9 }, { name: "Iliad", kind: "telefono", monthly: 11.25 }];
+  const splits = [{ provider: "Fastweb", parts: [{ part: "internet" as const, monthly: 28.95 }, { part: "telefono" as const, monthly: 8.95 }] }];
+  const cur = currentSpend(offers, sup, [{ label: "FASTWEB SpA", monthly: 37.9 }], splits);
+  assert.deepEqual(cur.map((c) => [c.category, c.provider, c.monthly]), [
+    ["internet", "Fastweb Casa", 28.95],
+    ["telefono", "Iliad + Fastweb Mobile", 20.2],
+  ]);
+  const [internet, telefono] = summarize(offers, cur);
+  assert.equal(internet.offers[0].saving, 3.96, "internet contro la sola parte di casa, non contro tutto il conto");
+  assert.equal(telefono.offers[0].saving, 4.26, "con due SIM l'offerta sostituisce la più cara (Iliad 11,25)");
 });

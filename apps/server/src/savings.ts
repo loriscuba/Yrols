@@ -35,10 +35,15 @@ export function firstYearCost(o: Pick<SavingOffer, "monthlyCost" | "regularCost"
   return round(o.monthlyCost * promo + regularPrice(o) * (12 - promo));
 }
 
-/** Voce di spesa attuale. */
-export interface CurrentSpend { category: SavingCategory; provider: string; monthly: number; from: "controllo" | "fornitori" | "movimenti" }
+/** Voce di spesa attuale. Con più linee (es. due SIM di operatori diversi) `lines` le elenca una per una. */
+export interface CurrentSpend {
+  category: SavingCategory; provider: string; monthly: number; from: "controllo" | "fornitori" | "movimenti" | "fattura";
+  lines?: { provider: string; monthly: number }[];
+}
 
-/** Scheda dell'anagrafica fornitori (tabella yrols.suppliers), solo i campi che servono qui. */
+/** Parte di una bolletta scorporata per servizio (vedi billParts.ts): es. Fastweb → internet casa + SIM mobile. */
+export interface SplitLite { provider: string; parts: { part: "internet" | "telefono"; monthly: number }[] }
+
 export interface SupplierLite { name: string; kind: string; monthly: number | null; status?: string | null }
 /** Pagamento ricorrente riconosciuto dai movimenti (vedi recurring.ts), solo i campi che servono qui. */
 export interface RecurringLite { label: string; monthly: number }
@@ -58,22 +63,37 @@ export function guessCategory(name: string): SavingCategory | "energia" | null {
   return null;
 }
 
-/** Spesa attuale per voce, dalla fonte migliore disponibile. Un fornitore di luce e gas insieme conta su entrambe. */
-export function currentSpend(offers: SavingOffer[], suppliers: SupplierLite[] | null, recurring: RecurringLite[]): CurrentSpend[] {
+/** Stesso fornitore? Confronta la prima parola del nome ("Fastweb" = "FASTWEB SPA" = "Fastweb Mobile"). */
+const sameProvider = (a: string, b: string) => {
+  const w = (s: string) => s.trim().toLowerCase().split(/[\s.,]+/)[0] ?? "";
+  return !!w(a) && w(a) === w(b);
+};
+
+/**
+ * Spesa attuale per voce, dalla fonte migliore disponibile. Un fornitore di luce e gas insieme conta su entrambe.
+ * I fornitori con una bolletta scorporata (`splits`, es. Fastweb internet + mobile) contano sulle voci giuste con
+ * gli importi della fattura, e si sommano alle altre linee della stessa voce (es. SIM Iliad + SIM Fastweb).
+ */
+export function currentSpend(offers: SavingOffer[], suppliers: SupplierLite[] | null, recurring: RecurringLite[], splits: SplitLite[] = []): CurrentSpend[] {
+  const isSplit = (name: string | null | undefined) => !!name && splits.some((s) => sameProvider(s.provider, name));
   const out = new Map<SavingCategory, CurrentSpend>();
   // 1. Il controllo settimanale indica la spesa attuale con cui ha confrontato: è la più precisa.
   for (const o of offers) {
-    if (o.currentMonthly == null || out.has(o.category)) continue;
-    out.set(o.category, { category: o.category, provider: o.currentProvider ?? "Fornitore attuale", monthly: o.currentMonthly, from: "controllo" });
+    if (o.currentMonthly == null || out.has(o.category) || isSplit(o.currentProvider)) continue;
+    const provider = o.currentProvider ?? "Fornitore attuale";
+    out.set(o.category, { category: o.category, provider, monthly: o.currentMonthly, from: "controllo", lines: [{ provider, monthly: o.currentMonthly }] });
   }
   // 2. Anagrafica fornitori (se presente), poi 3. pagamenti ricorrenti.
   const add = (category: SavingCategory, provider: string, monthly: number, from: CurrentSpend["from"]) => {
     const cur = out.get(category);
     if (cur && cur.from !== from) return;
-    if (cur) { cur.monthly += monthly; if (!cur.provider.includes(provider)) cur.provider += ` + ${provider}`; }
-    else out.set(category, { category, provider, monthly, from });
+    if (cur) {
+      cur.monthly += monthly;
+      const line = cur.lines!.find((l) => l.provider === provider);
+      if (line) line.monthly += monthly; else { cur.lines!.push({ provider, monthly }); cur.provider += ` + ${provider}`; }
+    } else out.set(category, { category, provider, monthly, from, lines: [{ provider, monthly }] });
   };
-  const fromSuppliers = (suppliers ?? []).filter((s) => s.status !== "nascosto" && s.monthly && s.monthly > 0);
+  const fromSuppliers = (suppliers ?? []).filter((s) => s.status !== "nascosto" && s.monthly && s.monthly > 0 && !isSplit(s.name));
   for (const s of fromSuppliers) {
     const c: SavingCategory | "energia" | null = KIND_TO_CATEGORY[s.kind] ?? (s.kind === "altro" ? guessCategory(s.name) : null);
     if (c === "energia") continue; // luce e gas insieme: senza separazione non si confronta, lo fa il controllo
@@ -81,10 +101,31 @@ export function currentSpend(offers: SavingOffer[], suppliers: SupplierLite[] | 
   }
   for (const r of recurring) {
     const c = guessCategory(r.label);
-    if (!c || c === "energia" || r.monthly <= 0) continue;
+    if (!c || c === "energia" || r.monthly <= 0 || isSplit(r.label)) continue;
     add(c, r.label, r.monthly, "movimenti");
   }
+  // 4. Bollette scorporate: ogni servizio va sulla sua voce, accanto alle eventuali altre linee.
+  for (const s of splits) {
+    for (const p of s.parts) {
+      if (p.monthly <= 0) continue;
+      const name = `${s.provider} ${p.part === "telefono" ? "Mobile" : "Casa"}`;
+      const cur = out.get(p.part);
+      if (cur) { cur.monthly += p.monthly; cur.provider += ` + ${name}`; cur.lines!.push({ provider: name, monthly: p.monthly }); }
+      else out.set(p.part, { category: p.part, provider: name, monthly: p.monthly, from: "fattura", lines: [{ provider: name, monthly: p.monthly }] });
+    }
+  }
   return SAVING_CATEGORIES.flatMap((c) => (out.has(c) ? [round2(out.get(c)!)] : []));
+}
+
+/**
+ * Spesa con cui confrontare un'offerta. Con più linee nella stessa voce (es. due SIM) un'offerta sostituisce
+ * una linea sola: si confronta con la più cara. Altrimenti vale la spesa indicata dal controllo per quell'offerta
+ * (sa separare luce e gas), poi quella della voce.
+ */
+export function compareBase(o: Pick<SavingOffer, "currentMonthly">, cur: CurrentSpend | null): number | null {
+  if (cur?.lines && cur.lines.length > 1) return Math.max(...cur.lines.map((l) => l.monthly));
+  if (cur && cur.from !== "controllo") return cur.monthly;
+  return o.currentMonthly ?? cur?.monthly ?? null;
 }
 
 export type RankedOffer = SavingOffer & {
@@ -113,7 +154,7 @@ export function summarize(offers: SavingOffer[], current: CurrentSpend[], showHi
     const list = offers
       .filter((o) => o.category === category && o.active && (showHidden || o.status !== "nascosta"))
       .map((o) => {
-        const base = o.currentMonthly ?? cur?.monthly ?? null;
+        const base = compareBase(o, cur);
         return {
           ...o,
           saving: base == null ? null : round(base - regularPrice(o)),
@@ -128,4 +169,4 @@ export function summarize(offers: SavingOffer[], current: CurrentSpend[], showHi
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
-const round2 = (c: CurrentSpend): CurrentSpend => ({ ...c, monthly: round(c.monthly) });
+const round2 = (c: CurrentSpend): CurrentSpend => ({ ...c, monthly: round(c.monthly), lines: c.lines?.map((l) => ({ ...l, monthly: round(l.monthly) })) });
