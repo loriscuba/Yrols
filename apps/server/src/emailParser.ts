@@ -49,12 +49,14 @@ const DEADLINE_RULES: [RegExp, string][] = [
   [/canone rai/i, "Canone RAI"],
   [/abbonamento.*(scad|rinnov)|(scad|rinnov).*abbonamento/i, "Rinnovo abbonamento"],
 ];
-const NOISE = /newsletter|offert|promo|sconto|buono|coupon|convenienza|webinar|unsubscribe.*offert|prenotazion|appuntamento|aggiornamento (?:del|sul) servizio|service update|termini|condizioni|novità|acquistal|scopri|vinci|regalo|cashback/i;
+const NOISE = /newsletter|offert|promo|sconto|buono|coupon|convenienza|webinar|unsubscribe.*offert|prenotazion|appuntamento|aggiornamento (?:del|sul) servizio|service update|termini|condizioni|novità|acquistal|scopri|vinci|regalo|cashback|\bordin[ea]|\bordinat|spedit|consegn|pacco|ritiro|annunc|conferma (?:di |d[ie]l?l?'?)?\s*(?:acquisto|ordine)|riepilogo (?:giornaliero|settimanale)/i;
 // Mittenti di marketing: news.paypal.com, remind.facile.it, marketing@…, promo@…
+// Negozi online, consegne, annunci e newsletter: ricevute d'ordine e riepiloghi, non bollette.
+const SHOP_SENDER = /amazon|deliveroo|just ?eat|glovo|ebay|zalando|idealista|immobiliare\.it|ticketone|substack|booking\.com|airbnb|vinted|subito\.it/i;
 const NOISE_SENDER = /@(?:[\w-]+\.)*(?:news|newsletter|marketing|promo|promozioni|remind|offerte|info-?mail)\.|(?:^|[<\s"])(?:news|newsletter|marketing|promo|offerte)@/i;
 
 /** Pubblicità, newsletter e comunicazioni di servizio: si riconoscono da oggetto e mittente. */
-export const isNoise = (from: string, subject: string) => NOISE.test(subject) || NOISE_SENDER.test(from);
+export const isNoise = (from: string, subject: string) => NOISE.test(subject) || NOISE_SENDER.test(from) || SHOP_SENDER.test(from);
 
 /** Testo leggibile da una mail HTML: niente stili, script e tag. */
 export function htmlToText(html: string): string {
@@ -145,8 +147,9 @@ export function parseEmail(e: ParsedEmail): Suggestion | null {
     }
   }
 
-  if (!BILL_WORDS.test(all)) return null;
   const known = PROVIDERS.find(([re]) => re.test(head)) ?? PROVIDERS.find(([re]) => re.test(all));
+  // Da un mittente sconosciuto, "bolletta" o "fattura" devono stare nell'oggetto: nel solo testo compaiono anche nelle ricevute d'ordine.
+  if (!BILL_WORDS.test(known ? all : e.subject)) return null;
   const amount = findAmount(all);
   const dueDate = findDueDate(all);
   // Una bolletta vera ha un importo, oppure è di un fornitore noto con una scadenza esplicita.
