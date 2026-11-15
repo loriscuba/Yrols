@@ -6,6 +6,8 @@ import { cloudEnabled } from "../cloud";
 import { useProjection } from "../projection";
 import { date, dateTime, money } from "../format";
 import { Card, Empty, ErrorBanner, Field, Modal, Stat } from "../components/ui";
+import { latestSplits } from "../../../server/src/billParts.ts";
+import type { InvoiceItem } from "../../../server/src/invoiceParser.ts";
 import { currentSpend, isPromo, regularPrice, summarize, type SavingCategory, type SavingOffer, type SupplierLite } from "../../../server/src/savings.ts";
 
 interface Profile {
@@ -16,6 +18,7 @@ interface SavingsData {
   offers: SavingOffer[]; profile: Profile;
   lastRun: { runAt: string; sources: string[]; summary: string | null; offersCount: number } | null;
   suppliers: SupplierLite[] | null;
+  bills?: { provider: string; kind: string; dueDate: string; items: InvoiceItem[] | null }[];
 }
 
 const ICON: Record<SavingCategory, typeof Wifi> = { luce: Lightbulb, gas: Flame, internet: Wifi, telefono: Smartphone, abbonamenti: Tv };
@@ -29,7 +32,8 @@ export function SavingsPage() {
 
   const summary = useMemo(() => {
     if (!data) return [];
-    const cur = currentSpend(data.offers, data.suppliers, recurring.map((r) => ({ label: r.label, monthly: r.monthly })));
+    const splits = [...latestSplits(data.bills ?? []).values()];
+    const cur = currentSpend(data.offers, data.suppliers, recurring.map((r) => ({ label: r.label, monthly: r.monthly })), splits);
     return summarize(data.offers, cur, showHidden);
   }, [data, recurring, showHidden]);
 
@@ -88,7 +92,9 @@ export function SavingsPage() {
                   : c.offers.length ? <span className="badge neutral"><Check size={14} aria-hidden />Paghi già poco</span> : null}>
                 <p className="hint proj-balance">
                   {c.current
-                    ? <>Oggi: <strong>{c.current.provider}</strong>, circa {money(c.current.monthly)} al mese{c.current.from === "movimenti" ? " (dai movimenti in banca)" : ""}</>
+                    ? (c.current.lines?.length ?? 0) > 1
+                      ? <>Oggi: {c.current.lines!.map((l, n) => <span key={l.provider}>{n ? " + " : ""}<strong>{l.provider}</strong> {money(l.monthly)}</span>)}, in tutto {money(c.current.monthly)} al mese. Ogni offerta è confrontata con la linea più cara.</>
+                      : <>Oggi: <strong>{c.current.provider}</strong>, circa {money(c.current.monthly)} al mese{c.current.from === "movimenti" ? " (dai movimenti in banca)" : c.current.from === "fattura" ? " (dall'ultima fattura)" : ""}</>
                     : "Spesa attuale non riconosciuta"}
                 </p>
                 {c.offers.length === 0 ? <p className="hint">Nessuna offerta trovata in questo controllo.</p> : (
