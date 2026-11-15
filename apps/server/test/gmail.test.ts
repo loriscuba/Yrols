@@ -48,3 +48,30 @@ test("Gmail: errore leggibile senza dati personali", async () => {
   const f = (async () => new Response("no", { status: 401 })) as unknown as typeof fetch;
   await assert.rejects(listMessageIds("tok", { sinceDays: 1, maxMessages: 1 }, f), /Gmail 401 su \/messages$/);
 });
+
+test("Gmail: ritenta sul limite di frequenza e salta il messaggio che resta illeggibile", async () => {
+  const hits: Record<string, number> = {};
+  const err = (status: number, reason: string) => Response.json({ error: { errors: [{ reason }] } }, { status });
+  const f = (async (input: string | URL) => {
+    const u = new URL(String(input));
+    if (u.pathname.endsWith("/messages")) return Response.json({ messages: [{ id: "a" }, { id: "b" }, { id: "c" }] });
+    const id = u.pathname.split("/").pop()!;
+    hits[id] = (hits[id] ?? 0) + 1;
+    if (id === "a" && hits[id] === 1) return err(403, "userRateLimitExceeded");
+    if (id === "b") return err(403, "forbidden");
+    return Response.json({ raw: rfc822(`Bolletta ${id}`, "Totale 10,00 euro, scadenza 16/11/2026.") });
+  }) as typeof fetch;
+  const skipped: string[] = [];
+  const out = [];
+  for await (const m of readGmail("tok", { sinceDays: 30, maxMessages: 50, retryDelays: [0, 0], onSkip: (e) => skipped.push(e.message) }, new Set(), f)) out.push(m.messageId);
+  assert.deepEqual(out, ["gmail:a", "gmail:c"]);
+  assert.equal(hits.a, 2, "ritentato dopo il limite di frequenza");
+  assert.equal(hits.b, 1, "un 403 non temporaneo non si ritenta");
+  assert.deepEqual(skipped, ["Gmail 403 (forbidden) su /messages/…"]);
+});
+
+test("Gmail: token scaduto (401) ferma la lettura", async () => {
+  const f = (async (input: string | URL) => new URL(String(input)).pathname.endsWith("/messages")
+    ? Response.json({ messages: [{ id: "a" }] }) : new Response("", { status: 401 })) as typeof fetch;
+  await assert.rejects((async () => { for await (const _ of readGmail("tok", { sinceDays: 1, maxMessages: 5, retryDelays: [] }, new Set(), f)); })(), /Gmail 401/);
+});
