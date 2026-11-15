@@ -44,3 +44,46 @@ test("PDF illeggibile: si usa il testo della mail", async () => {
     pdfs: [{ filename: "rotto.pdf", content: new TextEncoder().encode("non sono un pdf") }] }, getDocument as unknown as GetDocument);
   assert.deepEqual([s?.provider, s?.amount, s?.pdf], ["A2A", 50, null]);
 });
+
+/** PDF con testo e campi modulo compilati [nome, valore] (come certi F24 dei Comuni). */
+function formPdf(lines: [number, number, string][], fields: [string, string][]): Uint8Array {
+  const esc = (s: string) => s.replace(/[\\()]/g, (c) => "\\" + c);
+  const stream = lines.map(([x, y, s]) => `BT /F1 10 Tf ${x} ${y} Td (${esc(s)}) Tj ET`).join("\n");
+  const annots = fields.map((_, i) => `${6 + i} 0 R`).join(" ");
+  const objs = [
+    `<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [${annots}] >> >>`,
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Annots [${annots}] /Resources << /Font << /F1 5 0 R >> >> >>`,
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    ...fields.map(([n, v], i) => `<< /Type /Annot /Subtype /Widget /FT /Tx /T (${esc(n)}) /V (${esc(v)}) /Rect [400 ${500 - i * 20} 500 ${515 - i * 20}] /P 3 0 R >>`),
+  ];
+  let out = "%PDF-1.4\n";
+  const offs: number[] = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => String(o).padStart(10, "0") + " 00000 n \n").join("")}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new TextEncoder().encode(out);
+}
+
+const tariMail = { from: "Ufficio Tributi <tributi@comune.example.it>", subject: "TARI 2026",
+  text: "Buongiorno, in allegato si trasmette modello F24 in rata unica con scadenza 02/12/2026 relativo alla Tari anno 2026." };
+
+test("TARI: importo dal modello F24 allegato, scadenza dalla mail", async () => {
+  const f24 = tinyPdf([
+    [40, 800, "MODELLO DI PAGAMENTO UNIFICATO F24"], [40, 700, "SEZIONE IMU E ALTRI TRIBUTI LOCALI"],
+    [40, 680, "EL"], [80, 680, "Z999"], [140, 680, "3944"], [200, 680, "2026"], [300, 680, "287,40"],
+    [40, 660, "EL"], [80, 660, "Z999"], [140, 660, "TEFA"], [200, 660, "2026"], [300, 660, "14,37"],
+    [40, 600, "SALDO FINALE"], [200, 600, "EURO +"], [300, 600, "301,77"],
+  ]);
+  const s = await analyzeEmail({ ...tariMail, pdfs: [{ filename: "F24.pdf", content: f24 }] }, getDocument as unknown as GetDocument);
+  assert.deepEqual([s?.kind, s?.provider, s?.billKind, s?.amount, s?.dueDate, s?.pdf?.filename], ["bill", "TARI", "rifiuti", 301.77, "2026-12-02", "F24.pdf"]);
+});
+
+test("F24 compilabile: importi nei campi del modulo", async () => {
+  const f24 = formPdf([[40, 800, "Modello F24 - Delega irrevocabile"], [40, 700, "codice tributo 3944"], [40, 600, "SALDO FINALE EURO"]],
+    [["saldo_finale", "156,00"]]);
+  const s = await analyzeEmail({ ...tariMail, pdfs: [{ filename: "F24.pdf", content: f24 }] }, getDocument as unknown as GetDocument);
+  assert.deepEqual([s?.provider, s?.amount, s?.dueDate], ["TARI", 156, "2026-12-02"]);
+});

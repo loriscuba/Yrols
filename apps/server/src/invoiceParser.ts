@@ -62,7 +62,8 @@ function amountAfter(text: string, label: RegExp, within = 60): number | null {
 }
 
 const TOTAL_LABELS = [
-  /totale\s+da\s+pagare/, /importo\s+da\s+pagare/, /totale\s+(?:della\s+)?(?:fattura|bolletta|documento|conto)/, /da\s+pagare/, /totale\s+dovuto/,
+  /saldo\s+finale/, /totale\s+da\s+pagare/, /importo\s+da\s+pagare/, /totale\s+(?:della\s+)?(?:fattura|bolletta|documento|conto)/, /da\s+pagare/, /totale\s+dovuto/,
+  /importo\s+(?:totale|complessivo)(?:\s+dovuto)?/, /importo\s+(?:della\s+)?rata\s+unica/, /rata\s+unica/, /totale\s+avviso/,
 ];
 const DUE_LABELS = [/data\s+(?:di\s+)?scadenza/, /scadenza\s+(?:pagamento|fattura|bolletta)?/, /(?:da\s+pagare|pagare)\s+entro(?:\s+il)?/, /entro\s+il/];
 const ISSUE_LABELS = [/emessa\s+il/, /data\s+(?:di\s+)?emissione/, /data\s+fattura/, /fattura\s+(?:n\.?|nr\.?|numero)\s*\S+\s+del/];
@@ -103,15 +104,38 @@ export function parseInvoice(text: string): Invoice {
     if (Number.isFinite(v)) items.push({ description: m[1].replace(/\s{2,}/g, " ").trim(), amount: v, vat: Number(m[3]) });
   }
 
+  // F24 (TARI, IMU…): niente numero fattura, l'importo è il "saldo finale"; il codice tributo dice cos'è.
+  const f24 = isF24(t);
+  if (f24 && amount === null) amount = f24Amount(t);
+  const tributo = f24 ? f24Tax(t) : null;
+
   return {
-    provider: known?.[1] ?? null,
-    kind: known?.[2] ?? null,
+    provider: tributo?.[0] ?? known?.[1] ?? null,
+    kind: tributo?.[1] ?? known?.[2] ?? null,
     invoiceNumber: num?.[1] ?? null,
     issueDate, dueDate, periodFrom, periodTo, amount, items,
   };
 }
 
+export const isF24 = (t: string) => /\bF24\b|modello\s+di\s+pagamento\s+unificato|delega\s+irrevocabile/i.test(t);
+
+/** Codici tributo più comuni per la casa: TARI (3944/3950/TEFA TEFA), IMU (3912-3930). */
+function f24Tax(t: string): [string, string] | null {
+  if (/\b(3944|3945|3950|3951|TEFA)\b|\btari\b|rifiuti/i.test(t)) return ["TARI", "rifiuti"];
+  if (/\b39(1[2-9]|2[0-9]|30)\b|\bimu\b/i.test(t)) return ["IMU", "altro"];
+  return null;
+}
+
+/** Saldo dell'F24: dopo "SALDO FINALE" o "SALDO (A-B)"; altrimenti il primo "TOTALE" con importo. */
+function f24Amount(t: string): number | null {
+  for (const l of [/saldo\s+finale(?:\s+euro)?/, /saldo\s*\(\s*[a-z]\s*-\s*[a-z]\s*\)/, /totale\s+[a-z]\b/, /totale/]) {
+    const v = amountAfter(t, l, 80);
+    if (v !== null && v > 0) return v;
+  }
+  return null;
+}
+
 /** true se il testo sembra davvero una fattura/bolletta (e non, per esempio, un volantino). */
-export function looksLikeInvoice(inv: Invoice): boolean {
-  return inv.amount !== null && (inv.invoiceNumber !== null || inv.dueDate !== null);
+export function looksLikeInvoice(inv: Invoice, text?: string): boolean {
+  return inv.amount !== null && (inv.invoiceNumber !== null || inv.dueDate !== null || (!!text && isF24(text)));
 }
