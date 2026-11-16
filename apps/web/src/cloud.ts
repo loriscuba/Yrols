@@ -138,7 +138,9 @@ export async function cloudRequest<T>(method: string, fullPath: string, body?: u
       if (q.get("to")) query = query.lte("bookingDate", q.get("to")!);
       const text = q.get("q")?.replace(/[,()*%]/g, " ").trim();
       if (text) query = query.or(`description.ilike.*${text}*,counterparty.ilike.*${text}*`);
-      return ok(await query.order("bookingDate", { ascending: false }).limit(Math.min(Number(q.get("limit")) || 200, 2000))) as T;
+      // Le banche danno solo la data, non l'ora: a parità di giorno prima i movimenti in attesa (i più recenti).
+      return ok(await query.order("bookingDate", { ascending: false }).order("status", { ascending: false })
+        .order("valueDate", { ascending: false, nullsFirst: true }).limit(Math.min(Number(q.get("limit")) || 200, 2000))) as T;
     }
   }
 

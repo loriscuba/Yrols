@@ -228,7 +228,9 @@ async function refresh(body: Record<string, unknown>, req: Request) {
   const live = new Map(conns.filter((c) => !c.valid_until || c.valid_until > now).map((c) => [c.id, c]));
   const accounts = (must(await db.from("bank_accounts").select("id,eb_uid,connection_id,bank_name").eq("source", "enablebanking"), "Lettura conti") as
     { id: string; eb_uid: string | null; connection_id: string | null; bank_name: string | null }[])
-    .filter((a) => a.eb_uid && a.connection_id && live.has(a.connection_id));
+    // Conti collegati dal vecchio connettore: l'uid Enable Banking è l'id stesso (eb_uid vuoto), come in connectors/enable-banking.
+    .map((a) => ({ ...a, eb_uid: a.eb_uid || a.id }))
+    .filter((a) => a.connection_id && live.has(a.connection_id));
   if (!accounts.length) return { refreshed: false, reason: "no_accounts", lastSync: last };
 
   const client = eb();
@@ -241,8 +243,8 @@ async function refresh(body: Record<string, unknown>, req: Request) {
   await Promise.all(accounts.map(async (a) => {
     const bank = a.bank_name ?? "Banca";
     try {
-      balances.push(...((await client.balances(a.eb_uid!, psu)).balances ?? []).map((b) => normalizeBalance(b, a.id)));
-      for (const t of await client.transactions(a.eb_uid!, dateFrom, psu)) transactions.push(await normalizeTransaction(t, a.id));
+      balances.push(...((await client.balances(a.eb_uid, psu)).balances ?? []).map((b) => normalizeBalance(b, a.id)));
+      for (const t of await client.transactions(a.eb_uid, dateFrom, psu)) transactions.push(await normalizeTransaction(t, a.id));
       okAccounts++;
     } catch (e) {
       const status = e instanceof EbError ? e.status : 0;
