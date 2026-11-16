@@ -2,13 +2,9 @@
   "mcpServers": {
     "supabase": {
       "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=exchjppslwhbnbzuhfqs&features=database,docs,debugging,development,functions"
-    },
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/",
+      "url": "https://mcp.supabase.com/mcp?project_ref=exchjppslwhbnbzuhfqs&features=database,docs,debugging,development,functions",
       "headers": {
-        "Authorization": "Bearer ${GITHUB_MCP_TOKEN}"
+        "Authorization": "Bearer ${SUPABASE_ACCESS_TOKEN}"
       }
     }
   }
