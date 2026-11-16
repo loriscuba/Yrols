@@ -378,3 +378,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .receipt-block .mini-head { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
 details.receipt-block summary { cursor: pointer; color: var(--text-secondary); font-size: 14px; margin-bottom: 6px; }
 .form-actions.wrap { flex-wrap: wrap; }
+
+/* Aggiornamento movimenti: avviso discreto in alto, sopra la pagina. */
+.refresh-toast {
+  position: sticky; top: 8px; z-index: 30; display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%;
+  margin: 0 auto 8px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  background: var(--accent-soft); color: var(--accent); box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+}
+.refresh-toast.critical { background: var(--critical-soft); color: var(--critical); border-radius: 12px; }

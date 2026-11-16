@@ -1,7 +1,41 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, CalendarClock, Home, Landmark, LogOut, Mail, ReceiptText, ShoppingCart, Moon, Sun, Repeat, Building2, PiggyBank, MoreHorizontal, X } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, RefreshCw, Home, Landmark, LogOut, Mail, ReceiptText, ShoppingCart, Moon, Sun, Repeat, Building2, PiggyBank, MoreHorizontal, X } from "lucide-react";
 import { supabase } from "../cloud";
 import { useEffect, useState } from "react";
+import { refreshAvailable, refreshBanks, useBankRefresh } from "../bankRefresh";
+
+/** Aggiorna i movimenti a ogni apertura dell'app (e al ritorno in primo piano), al massimo ogni 30 minuti. */
+function useRefreshOnOpen() {
+  useEffect(() => {
+    if (!refreshAvailable()) return;
+    refreshBanks({ auto: true });
+    const onVisible = () => { if (document.visibilityState === "visible") refreshBanks({ auto: true }); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+}
+
+/** Avviso discreto sull'aggiornamento in corso o appena finito. Quello automatico mostra solo novità ed errori. */
+function RefreshToast() {
+  const s = useBankRefresh();
+  const [hidden, setHidden] = useState<number | null>(null);
+  const at = "at" in s ? s.at : null;
+  useEffect(() => {
+    if (at === null) return;
+    const t = setTimeout(() => setHidden(at), s.status === "error" ? 8000 : 4000);
+    return () => clearTimeout(t);
+  }, [at, s.status]);
+  if (s.status === "idle" || (at !== null && hidden === at)) return null;
+  if (s.status === "info" && s.auto) return null;
+  if (s.status === "done" && s.auto && s.text.startsWith("Nessun")) return null;
+  const running = s.status === "running";
+  return (
+    <div className={`refresh-toast ${s.status === "error" ? "critical" : ""}`} role="status" aria-live="polite">
+      {running ? <RefreshCw size={14} className="spin" aria-hidden /> : s.status === "done" ? <CheckCircle2 size={14} aria-hidden /> : null}
+      <span>{running ? "Aggiorno i movimenti…" : s.text}</span>
+    </div>
+  );
+}
 
 /** `main`: voci sempre visibili nella barra in basso sul cellulare; le altre stanno in "Altro". */
 const NAV = [
@@ -30,6 +64,7 @@ function useTheme() {
 
 export function Layout() {
   const { dark, toggle } = useTheme();
+  useRefreshOnOpen();
   const { pathname } = useLocation();
   const [more, setMore] = useState(false);
   useEffect(() => { setMore(false); }, [pathname]);
@@ -94,7 +129,7 @@ export function Layout() {
           </div>
         </div>
       )}
-      <main className="content"><Outlet /></main>
+      <main className="content"><RefreshToast /><Outlet /></main>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // deno test supabase/functions/_shared/enablebanking.test.ts
 import { assert, assertEquals } from "jsr:@std/assert@1";
-import { createJwt, normalizeTransaction } from "./enablebanking.ts";
+import { createJwt, normalizeTransaction, psuHeaders, refreshWait } from "./enablebanking.ts";
 
 const b64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
 const toPem = (der: ArrayBuffer, label: string) =>
@@ -47,4 +47,28 @@ Deno.test("id sintetico identico al connettore Node", async () => {
   assertEquals(t.id, "h_e09ed67fb1b675fd2f050ffd2afd390a");
   assertEquals(t.amount, -10.5);
   assertEquals(t.counterparty, "Enel");
+});
+
+Deno.test("intestazioni PSU dalla richiesta del browser", () => {
+  const req = new Request("https://x.supabase.co/functions/v1/yrols-bank-auth", {
+    method: "POST",
+    headers: { "x-forwarded-for": "203.0.113.7, 10.0.0.1", "user-agent": "Mozilla/5.0 Test", "accept-language": "it-IT,it;q=0.9", referer: "https://loriscuba.github.io/Yrols/" },
+  });
+  assertEquals(psuHeaders(req), {
+    "Psu-Ip-Address": "203.0.113.7",
+    "Psu-User-Agent": "Mozilla/5.0 Test",
+    "Psu-Referer": "https://loriscuba.github.io/Yrols/",
+    "Psu-Accept-language": "it-IT,it;q=0.9",
+    "Psu-Accept": "application/json",
+  });
+  assertEquals(psuHeaders(new Request("https://x", { headers: { "user-agent": "a" } })), undefined);
+});
+
+Deno.test("frequenza delle letture dall'app", () => {
+  const now = Date.parse("2026-11-16T12:00:00Z");
+  assertEquals(refreshWait(null, true, now), null);
+  assertEquals(refreshWait("2026-11-16T11:00:00Z", true, now), null);
+  assertEquals(refreshWait("2026-11-16T11:50:00Z", true, now), 20 * 60_000);
+  assertEquals(refreshWait("2026-11-16T11:50:00Z", false, now), null);
+  assertEquals(refreshWait("2026-11-16T11:59:00Z", false, now), 60_000);
 });

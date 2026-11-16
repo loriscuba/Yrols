@@ -6,6 +6,7 @@ import { date, daysUntil, money, dateTime } from "../format";
 import { Card, DueBadge, Empty, ErrorBanner, Modal } from "../components/ui";
 import { BankBadge, BankDot, bankBrand, bankStyle } from "../components/BankBrand";
 import { bankAuthAvailable, completeBankAuth, listBanks, startBankAuth, type BankOption } from "../bankAuth";
+import { refreshBanks, useBankRefresh } from "../bankRefresh";
 
 type Notice = { kind: "ok" | "error"; text: string; retry30?: { bankName: string; country: string } };
 
@@ -28,6 +29,8 @@ export function BanksPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const online = bankAuthAvailable();
+  const refresh = useBankRefresh();
+  const refreshing = refresh.status === "running";
   const reloadAll = () => { accounts.reload(); connections.reload(); lastSync.reload(); txs.reload(); };
 
   const start = (opts: Parameters<typeof startBankAuth>[0], key: string) => {
@@ -73,7 +76,14 @@ export function BanksPage() {
           <h1>Banche</h1>
           <p className="sub">{lastSync.data ? `Ultimo aggiornamento ${dateTime(lastSync.data.receivedAt)}` : "Dati dal connettore Enable Banking"}</p>
         </div>
-        {online && <button className="btn primary" onClick={() => setPicker(true)}><Plus size={16} />Collega banca</button>}
+        {online && (
+          <div className="head-actions">
+            <button className="btn" onClick={() => refreshBanks()} disabled={refreshing || busy === "complete"} aria-busy={refreshing}>
+              <RefreshCw size={16} className={refreshing ? "spin" : ""} />{refreshing ? "Aggiorno…" : "Aggiorna ora"}
+            </button>
+            <button className="btn primary" onClick={() => setPicker(true)}><Plus size={16} />Collega banca</button>
+          </div>
+        )}
       </header>
       <ErrorBanner message={accounts.error ?? txs.error} />
       {busy === "complete" && <div className="banner info"><RefreshCw size={16} className="spin" aria-hidden />Completo il collegamento e scarico i movimenti…</div>}
