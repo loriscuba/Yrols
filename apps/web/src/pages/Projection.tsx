@@ -4,6 +4,7 @@ import { CalendarClock, CheckCircle2, Clock, Repeat, TrendingDown } from "lucide
 import { currentMonth, nextMonth, useProjection } from "../projection";
 import { date, money } from "../format";
 import { Card, Empty, ErrorBanner, Segmented, Stat } from "../components/ui";
+import { BankBadge } from "../components/BankBrand";
 
 const monthName = (m: string) => date(m + "-15", { month: "long", year: "numeric" });
 
@@ -47,7 +48,7 @@ export function ProjectionPage() {
             const after = which === "now" && acc?.balance != null ? acc.balance - a.remaining : null;
             return (
               <Card key={a.accountId}
-                title={`${acc?.bankName ?? "Banca"} · ${acc?.name ?? a.accountId}${acc?.iban ? ` …${acc.iban.slice(-4)}` : ""}`}
+                title={<span className="card-title-bank"><BankBadge name={acc?.bankName} size={24} />{`${acc?.bankName ?? "Banca"} · ${acc?.name ?? a.accountId}${acc?.iban ? ` …${acc.iban.slice(-4)}` : ""}`}</span>}
                 action={<span className="num">{money(a.expected)}</span>}>
                 {after !== null && (
                   <p className="hint proj-balance">

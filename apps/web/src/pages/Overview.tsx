@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { Bell, CalendarClock, KeyRound, Landmark, Mail, ReceiptText } from "lucide-react";
 import { useData } from "../hooks";
 import { currentMonth, useProjection } from "../projection";
-import type { Overview } from "../api";
+import type { Account, Overview } from "../api";
+import { BankBadge, bankBrand, bankStyle } from "../components/BankBrand";
 import { date, money, dateTime, label } from "../format";
 import { Card, DueBadge, Empty, ErrorBanner, Stat } from "../components/ui";
 import { BillsByKind, MonthlyFlowsChart, NetWorthChart } from "../components/Charts";
@@ -13,6 +14,8 @@ const AGENDA_LINK = { bill: "/bollette", deadline: "/scadenze", consent: "/banch
 export function OverviewPage() {
   const { data, error } = useData<Overview>("/overview");
   const proj = useProjection();
+  const accounts = useData<Account[]>("/banks/accounts");
+  const shownAccounts = (accounts.data ?? []).filter((a) => (a.balance ?? 0) !== 0);
   const month = proj.project(currentMonth());
   const greeting = new Date().getHours() < 13 ? "Buongiorno" : new Date().getHours() < 18 ? "Buon pomeriggio" : "Buonasera";
 
@@ -46,6 +49,21 @@ export function OverviewPage() {
               </Link>
             )}
           </div>
+
+          {shownAccounts.length > 0 && (
+            <div className="acct-chips">
+              {shownAccounts.map((a) => (
+                <Link key={a.id} to="/banche" className={`acct-chip ${bankBrand(a.bankName) ? "bank-tinted" : ""}`} style={bankStyle(a.bankName)}>
+                  <BankBadge name={a.bankName} />
+                  <span className="row-main">
+                    <span className="row-title">{a.bankName ?? "Banca"}</span>
+                    <span className="row-sub">{a.name ?? (a.iban ? `…${a.iban.slice(-4)}` : "Conto")}</span>
+                  </span>
+                  <span className="num">{money(a.balance, a.currency)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
 
           <div className="grid-2">
             <Card title="In arrivo" action={<Link className="link" to="/scadenze">Tutte</Link>}>

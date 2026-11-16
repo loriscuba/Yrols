@@ -336,3 +336,38 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .savings-toggle { align-self: flex-start; }
 .list .row-sub { white-space: normal; }
 
+
+/* Colori delle banche (Fineco, Revolut…): vedi components/BankBrand.tsx */
+.bank-badge { position: relative; display: inline-grid; place-items: center; flex: none; font-weight: 800; line-height: 1; letter-spacing: -0.02em;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
+.bank-badge.generic { background: var(--neutral-soft); color: var(--text-secondary); }
+.bank-badge-dot { position: absolute; right: 18%; bottom: 18%; width: 22%; height: 22%; border-radius: 50%; }
+.bank-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; margin-right: 6px; vertical-align: 1px; }
+.cell-bank { display: inline-flex; align-items: center; }
+.show-sm { display: none; }
+.stat-bank { display: flex; align-items: center; gap: 8px; min-width: 0; margin-bottom: 4px; }
+.stat-bank .stat-label { flex: 1; min-width: 0; }
+.bank-tinted { --tint: color-mix(in srgb, var(--bank) 7%, var(--surface));
+  background: var(--tint); border-color: color-mix(in srgb, var(--bank) 22%, var(--border)); border-top: 3px solid var(--bank); padding-top: 12px; }
+.bank-tinted:hover { border-color: color-mix(in srgb, var(--bank) 55%, var(--border)); border-top-color: var(--bank); }
+.stat-btn.bank-tinted.on { border-color: var(--bank); box-shadow: 0 0 0 1px var(--bank); }
+:root[data-theme="dark"] .bank-tinted { --tint: color-mix(in srgb, var(--bank) 14%, var(--surface)); border-top-color: color-mix(in srgb, var(--bank) 70%, white); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .bank-tinted { --tint: color-mix(in srgb, var(--bank) 14%, var(--surface)); border-top-color: color-mix(in srgb, var(--bank) 70%, white); }
+}
+.split-bar { display: flex; gap: 2px; height: 6px; border-radius: 999px; overflow: hidden; margin-top: 8px; background: var(--grid); }
+.split-bar span { display: block; min-width: 4px; }
+.card-title-bank { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.acct-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.acct-chip { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--surface); box-shadow: var(--shadow); color: inherit; text-decoration: none; min-width: 0; }
+.acct-chip.bank-tinted { padding-top: 10px; }
+.acct-chip .row-main { gap: 0; }
+.acct-chip .num { font-size: 17px; margin-left: auto; }
+@media (max-width: 860px) {
+  .show-sm { display: inline; }
+}
+@media (max-width: 600px) {
+  .acct-chips { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .stat-bank { gap: 6px; }
+}
