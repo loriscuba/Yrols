@@ -1,4 +1,5 @@
 # Legge la casella email ogni ora e propone bollette/scadenze nel cruscotto online.
+# Prima salva le bollette PDF scaricate dalle aree clienti dei fornitori (coda della Edge Function yrols-inbox).
 # Secret richiesti: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Gmail si collega dal cruscotto (OAuth in sola lettura,
 # token fornito dalla Edge Function yrols-email-auth); i secret YROLS_IMAP_* servono solo per altri provider.
 # Il repo è pubblico e i log anche: lo script stampa solo conteggi.
@@ -27,6 +28,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Bollette dalle aree clienti dei fornitori
+        run: npm run portal:cloud -w apps/server
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       - run: npm run email:cloud -w apps/server
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

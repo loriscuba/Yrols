@@ -126,7 +126,7 @@ function InvoiceDetail({ bill: b, onClose, onError }: { bill: Bill; onClose: () 
         {b.issueDate && <><dt>Emessa il</dt><dd>{date(b.issueDate)}</dd></>}
         {b.periodFrom && <><dt>Periodo</dt><dd>{date(b.periodFrom)} – {date(b.periodTo)}</dd></>}
         <dt>Stato</dt><dd>{b.paidAt ? `Pagata il ${date(b.paidAt)}` : "Da pagare"}</dd>
-        {b.source && b.source !== "manuale" && <><dt>Origine</dt><dd>{b.source === "email" ? "Email" : "PDF caricato"}</dd></>}
+        {b.source && b.source !== "manuale" && <><dt>Origine</dt><dd>{b.source === "email" ? "Email" : b.source === "portale" ? "Area clienti del fornitore" : "PDF caricato"}</dd></>}
       </dl>
       {!!b.items?.length && (
         <div className="table-wrap">

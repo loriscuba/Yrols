@@ -202,3 +202,17 @@ test("risparmio: offerte salvate dal controllo settimanale, stato conservato, so
   assert.deepEqual((await as("authenticated", LORIS, "select regular_cost::float r, promo_months p from yrols.saving_offers where provider = 'Beactive'"))[0], { r: 25.9, p: 6 });
   await assert.rejects(as("service_role", null, "select yrols.yrols_save_offers($1)", [{ offers: [offer({ promoMonths: 0 })] }]));
 });
+
+test("bollette dalle aree clienti: coda in sola lettura, origine 'portale' ammessa", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  const sha = "a".repeat(64);
+  await as("service_role", null, "insert into yrols.portal_files (sha256, provider, file_path) values ($1, 'Fastweb', 'portale/x.pdf')", [sha]);
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.portal_files")).length, 1);
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.portal_files")).length, 0);
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.portal_files (sha256, file_path) values ($1, 'x')", ["b".repeat(64)]), "solo la funzione mette in coda");
+  await assert.rejects(as("service_role", null, "insert into yrols.portal_files (sha256, file_path) values ($1, 'y')", [sha]), "lo stesso PDF una volta sola");
+  const [r] = await as("service_role", null, `select yrols.yrols_save_invoice('{"provider":"Fastweb","amount":42.19,"dueDate":"2026-12-25","invoiceNumber":"P1","filePath":"portale/x.pdf","source":"portale"}'::jsonb) as r`);
+  assert.equal(r.r.merged, false);
+  assert.deepEqual(await as("authenticated", LORIS, "select source from yrols.bills"), [{ source: "portale" }]);
+});

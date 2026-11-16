@@ -10,20 +10,11 @@
  *  2. In alternativa, casella IMAP dai secret YROLS_IMAP_* (altri provider).
  */
 import { createHash } from "node:crypto";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { imapConfigFromEnv, readMailbox } from "./email.ts";
 import { isNoise, type ParsedEmail } from "./emailParser.ts";
 import { readGmail } from "./gmail.ts";
 import { analyzeEmail } from "./invoiceEmail.ts";
-import type { GetDocument } from "./pdfText.ts";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-
-// Mappe dei caratteri e font standard di pdf.js: senza, i PDF con font CID (molti moduli F24) danno testo vuoto.
-const pdfjsDir = dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json"));
-const readPdf: GetDocument = (src) => (getDocument as unknown as GetDocument)({
-  ...src, cMapUrl: join(pdfjsDir, "cmaps") + "/", cMapPacked: true, standardFontDataUrl: join(pdfjsDir, "standard_fonts") + "/",
-});
+import { readPdf } from "./pdfNode.ts";
 
 const url = process.env.SUPABASE_URL?.replace(/\/+$/, "");
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
