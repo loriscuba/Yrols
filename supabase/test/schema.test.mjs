@@ -216,3 +216,38 @@ test("bollette dalle aree clienti: coda in sola lettura, origine 'portale' ammes
   assert.equal(r.r.merged, false);
   assert.deepEqual(await as("authenticated", LORIS, "select source from yrols.bills"), [{ source: "portale" }]);
 });
+
+test("scontrini: collegati in automatico al movimento con lo stesso importo, solo membri", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  // Due scontrini dello stesso importo: ognuno prende il suo movimento, prima quello che cita il negozio.
+  await as("authenticated", LORIS, "insert into yrols.receipts (store, purchase_date, total) values ('Tigullio Carni srl', '2026-11-16', 23.13), ('Bar Sport', '2026-11-16', 23.13), ('Panetteria', '2026-11-16', 4.20)");
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.receipts")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.receipts"));
+  const sync = (transactions) => as("service_role", null, "select yrols.yrols_bank_sync($1)", [{
+    source: "enablebanking", accounts: [{ id: "rev", name: "Revolut", bankName: "Revolut" }], transactions }]);
+  await sync([
+    { id: "x1", accountId: "rev", amount: -23.13, bookingDate: "2026-11-17", description: "Bar Sport" },
+    { id: "x2", accountId: "rev", amount: -23.13, bookingDate: "2026-11-18", description: "Tigullio Carni" },
+    { id: "x3", accountId: "rev", amount: 23.13, bookingDate: "2026-11-16", description: "Rimborso" },
+    { id: "x4", accountId: "rev", amount: -4.20, bookingDate: "2026-11-30", description: "Panetteria" },
+  ]);
+  const rows = await as("authenticated", LORIS, `select store, match, tx->>'id' tx from yrols.yrols_receipts order by id`);
+  assert.deepEqual(rows, [
+    { store: "Tigullio Carni srl", match: "auto", tx: "x2" },
+    { store: "Bar Sport", match: "auto", tx: "x1" },
+    { store: "Panetteria", match: null, tx: null },
+  ], "troppo tardi per la panetteria: resta da collegare");
+  // Proposte per il collegamento a mano: l'importo vicino entro 3 giorni compare, quelli già usati no.
+  await sync([{ id: "x5", accountId: "rev", amount: -4.5, bookingDate: "2026-11-17", description: "Forno" }]);
+  const [{ id }] = await as("authenticated", LORIS, "select id from yrols.receipts where store = 'Panetteria'");
+  const [{ c }] = await as("authenticated", LORIS, "select yrols.yrols_receipt_candidates($1) c", [id]);
+  assert.deepEqual(c.map((t) => [t.id, t.exact]), [["x5", false]]);
+  // Scollegato dall'utente: la sincronizzazione non lo ricollega.
+  await as("authenticated", LORIS, "update yrols.receipts set tx_account_id = null, tx_id = null, match = 'nessuno' where store = 'Bar Sport'");
+  await sync([{ id: "x1", accountId: "rev", amount: -23.13, bookingDate: "2026-11-17", description: "Bar Sport" }]);
+  assert.deepEqual(await as("authenticated", LORIS, "select match, tx_id from yrols.receipts where store = 'Bar Sport'"), [{ match: "nessuno", tx_id: null }]);
+  // Listino supermercati: solo membri.
+  await as("authenticated", LORIS, "insert into yrols.grocery_prices (store, product, price) values ('Lidl', 'Banane', 1.49)");
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.grocery_prices")).length, 0);
+});

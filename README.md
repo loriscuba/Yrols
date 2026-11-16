@@ -119,6 +119,19 @@ italiani (Enel, Eni Plenitude, A2A, Hera, Iren, Acea, TIM, Vodafone, WindTre, Il
 Fastweb…) e per scadenze come bollo auto, RC auto, IMU, F24, documenti; le email
 promozionali vengono ignorate. In locale si può lanciare una lettura a mano dalla pagina *Da email*.
 
+## Scontrini
+
+Pagina *Scontrini* (solo online): «Fotografa scontrino» apre la fotocamera del telefono. La foto,
+ridotta a 1600 px, va nel bucket privato `yrols-scontrini`; i dati in `yrols.receipts`.
+
+- **Collegamento al conto:** `yrols_match_receipts()` abbina ogni scontrino al movimento in uscita con lo
+  stesso importo, dal giorno prima a 6 giorni dopo l'acquisto (prima quello che cita il negozio). Gira al
+  salvataggio e a ogni sincronizzazione della banca; dal dettaglio si può scollegare o scegliere a mano.
+- **Lettura e consigli:** la Edge Function `yrols-scontrini` (secret `ANTHROPIC_API_KEY`) legge la foto con
+  Claude e confronta i prodotti con il listino `yrols.grocery_prices` dei supermercati della zona. Senza la
+  chiave lo scontrino si salva lo stesso, inserendo il totale a mano. Il listino si aggiorna a mano o dal
+  controllo periodico di Claude; ogni prezzo ha fonte e data.
+
 ## Test
 
 ```bash
