@@ -1,16 +1,18 @@
-// Edge Function "yrols-scontrini": legge la foto di uno scontrino con Claude e la confronta con il listino
-// dei supermercati della zona (tabella yrols.grocery_prices). Non salva nulla: restituisce la lettura,
-// la pagina Scontrini la mostra per conferma e poi salva foto e dati.
+// Edge Function "yrols-scontrini": legge la foto di uno scontrino con un servizio AI dal piano gratuito
+// (Groq o Google Gemini) e la confronta con il listino dei supermercati della zona (yrols.grocery_prices).
+// Non salva nulla: restituisce la lettura, la pagina Scontrini la mostra per conferma e poi salva foto e dati.
 //
 // POST JSON con Authorization: Bearer <sessione Supabase dell'utente>:
 //   { imageBase64: "<jpeg/png/webp in base64>", mediaType?: "image/jpeg" }
-// Risposta: { reading: ReceiptReading } oppure { error } (503 se manca la chiave Anthropic).
+// Risposta: { reading: ReceiptReading, provider } oppure { error } (503 se non c'è nessuna chiave).
 //
-// Secret della funzione: ANTHROPIC_API_KEY. Opzionale YROLS_ALLOWED_ORIGINS.
+// Secret della funzione (basta uno; se ci sono entrambi si prova prima Groq, poi Gemini):
+//   GROQ_API_KEY   (console.groq.com, gratis)       — modello GROQ_MODEL, predefinito qwen/qwen3.8-27b
+//   GEMINI_API_KEY (aistudio.google.com, gratis)    — modello GEMINI_MODEL, predefinito gemini-3.8-flash
+// Opzionale YROLS_ALLOWED_ORIGINS.
 
-import Anthropic from "npm:@anthropic-ai/sdk@0.137.0";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { normalizeReading, pricesForPrompt, READING_SCHEMA, SYSTEM_PROMPT, type GroceryPrice } from "../_shared/receipts.ts";
+import { extractJson, normalizeReading, pricesForPrompt, SYSTEM_PROMPT, type GroceryPrice } from "../_shared/receipts.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 const MAX_BASE64 = 8 * 1024 * 1024;
@@ -44,13 +46,58 @@ async function memberClient(req: Request) {
   return db;
 }
 
+/** Errore del servizio AI: quota del piano gratuito finita, chiave sbagliata o servizio giù. */
+class ProviderError extends Error { constructor(public status: number, public provider: string) { super(`${provider} ${status}`); } }
+
+async function askGroq(key: string, image: string, mediaType: string, listino: string): Promise<string> {
+  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: env("GROQ_MODEL") || "qwen/qwen3.8-27b",
+      temperature: 0.1,
+      max_completion_tokens: 8000,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: [
+          { type: "image_url", image_url: { url: `data:${mediaType};base64,${image}` } },
+          { type: "text", text: listino },
+        ] },
+      ],
+    }),
+  });
+  if (!r.ok) throw new ProviderError(r.status, "groq");
+  const data = await r.json() as { choices?: { message?: { content?: string } }[] };
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
+async function askGemini(key: string, image: string, mediaType: string, listino: string): Promise<string> {
+  const model = env("GEMINI_MODEL") || "gemini-3.8-flash";
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ inline_data: { mime_type: mediaType, data: image } }, { text: listino }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
+    }),
+  });
+  if (!r.ok) throw new ProviderError(r.status, "gemini");
+  const data = await r.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  return (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(req) });
   if (req.method !== "POST") return json(req, 405, { error: "Usa POST" });
   try {
     const db = await memberClient(req);
-    const apiKey = env("ANTHROPIC_API_KEY");
-    if (!apiKey) throw new HttpError(503, "Lettura automatica non attiva: manca la chiave Anthropic. Inserisci il totale a mano.");
+    const providers = [
+      env("GROQ_API_KEY") && { name: "groq", ask: (i: string, m: string, l: string) => askGroq(env("GROQ_API_KEY"), i, m, l) },
+      env("GEMINI_API_KEY") && { name: "gemini", ask: (i: string, m: string, l: string) => askGemini(env("GEMINI_API_KEY"), i, m, l) },
+    ].filter(Boolean) as { name: string; ask: (i: string, m: string, l: string) => Promise<string> }[];
+    if (!providers.length) throw new HttpError(503, "Lettura automatica non attiva: manca la chiave di Groq o Gemini. Inserisci il totale a mano.");
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const image = typeof body.imageBase64 === "string" ? body.imageBase64.replace(/^data:[^,]*,/, "").replace(/\s+/g, "") : "";
@@ -65,37 +112,28 @@ Deno.serve(async (req) => {
     const seen = new Set<string>();
     const prices = ((rows ?? []) as GroceryPrice[]).map((p) => ({ ...p, price: Number(p.price), unit_price: p.unit_price == null ? null : Number(p.unit_price) }))
       .filter((p) => { const k = `${p.store}|${p.product}|${p.detail ?? ""}`.toLowerCase(); return seen.has(k) ? false : (seen.add(k), true); });
+    const listino = `Listino dei supermercati della zona (catena | prodotto | formato | prezzo | prezzo unitario | data):\n${pricesForPrompt(prices)}`;
 
-    const client = new Anthropic({ apiKey });
-    const msg = await client.beta.messages.create({
-      model: "claude-opus-5-5",
-      max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "medium", format: { type: "json_schema", schema: READING_SCHEMA } },
-      system: SYSTEM_PROMPT,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
-          { type: "text", text: `Listino dei supermercati della zona (catena | prodotto | formato | prezzo | prezzo unitario | data):\n${pricesForPrompt(prices)}` },
-        ],
-      }],
-    } as unknown as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming);
-
-    if (msg.stop_reason === "refusal") throw new HttpError(422, "Non sono riuscito a leggere lo scontrino: inserisci i dati a mano.");
-    if (msg.stop_reason === "max_tokens") throw new HttpError(422, "Scontrino troppo lungo da leggere in una volta: inserisci il totale a mano.");
-    const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
-    let raw: unknown;
-    try { raw = JSON.parse(text); } catch { throw new HttpError(422, "Lettura non riuscita: riprova con una foto più nitida."); }
-    return json(req, 200, { reading: normalizeReading(raw) });
+    // Prova i servizi in ordine: se uno ha finito la quota gratuita o non risponde, passa al successivo.
+    let last: ProviderError | null = null;
+    for (const p of providers) {
+      try {
+        const text = await p.ask(image, mediaType, listino);
+        let raw: unknown;
+        try { raw = extractJson(text); } catch { throw new HttpError(422, "Lettura non riuscita: riprova con una foto più nitida."); }
+        return json(req, 200, { reading: normalizeReading(raw), provider: p.name });
+      } catch (e) {
+        if (!(e instanceof ProviderError)) throw e;
+        console.error("scontrini provider", e.provider, e.status);
+        last = e;
+      }
+    }
+    const quota = last?.status === 429;
+    throw new HttpError(503, quota ? "Quota gratuita di oggi finita: riprova domani o inserisci il totale a mano."
+      : last && (last.status === 401 || last.status === 403) ? "Chiave del servizio di lettura non valida: controllala in Supabase."
+      : "Servizio di lettura non disponibile: riprova tra poco.");
   } catch (e) {
     if (e instanceof HttpError) return json(req, e.status, { error: e.message });
-    if (e instanceof Anthropic.APIError) {
-      console.error("anthropic", e.status);
-      const status = e.status === 429 || (e.status ?? 0) >= 500 ? 503 : 502;
-      return json(req, status, { error: status === 503 ? "Servizio di lettura occupato: riprova tra poco." : "Lettura non riuscita: controlla la chiave Anthropic." });
-    }
     console.error("scontrini", (e as Error).message);
     return json(req, 500, { error: "Errore interno nella lettura" });
   }

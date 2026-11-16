@@ -70,7 +70,12 @@ Confronto (alternatives):
 - Se lo scontrino non dice il peso di un prodotto sfuso, non confrontarlo. Se non c'è un equivalente, alternatives è vuoto. Non mettere come alternativa la stessa catena dello scontrino.
 
 tips: da 2 a 4 consigli pratici e brevi in italiano, legati a questa spesa (dove conviene comprare cosa, marche del distributore, offerte). Se un consiglio non viene dal listino ma da conoscenza generale, dillo ("in genere…").
-summary: una frase sul risultato del confronto.`;
+summary: una frase sul risultato del confronto.
+
+Rispondi SOLO con un oggetto JSON con questa forma (null dove un dato manca):
+{"store": "...", "storeVat": "...", "storeAddress": "...", "chain": "...", "date": "AAAA-MM-GG", "time": "HH:MM", "total": 0.00,
+ "electronicPayment": true, "items": [{"description": "...", "product": "...", "category": "una tra: ${CATEGORIES.join(", ")}", "amount": 0.00,
+ "alternatives": [{"store": "...", "price": 0.00, "detail": "..."}]}], "tips": ["..."], "summary": "..."}`;
 
 const round = (n: number) => Math.round(n * 100) / 100;
 const text = (v: unknown, max = 200) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
@@ -134,4 +139,12 @@ export function savings(items: ReceiptItem[]): Savings {
     return { store, total: round(total), saving: round(paid - total), covered };
   }).sort((a, b) => b.saving - a.saving);
   return { paid, cheaper, stores, bestMix: round(cheaper.reduce((s, c) => s + c.saving, 0)) };
+}
+
+/** Estrae l'oggetto JSON dalla risposta del modello, anche se è racchiuso in ```json … ``` o ha testo intorno. */
+export function extractJson(text: string): unknown {
+  const s = text.replace(/```(?:json)?/gi, "");
+  const a = s.indexOf("{"), b = s.lastIndexOf("}");
+  if (a < 0 || b <= a) throw new Error("Nessun JSON nella risposta");
+  return JSON.parse(s.slice(a, b + 1));
 }

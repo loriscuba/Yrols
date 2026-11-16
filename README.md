@@ -127,10 +127,16 @@ ridotta a 1600 px, va nel bucket privato `yrols-scontrini`; i dati in `yrols.rec
 - **Collegamento al conto:** `yrols_match_receipts()` abbina ogni scontrino al movimento in uscita con lo
   stesso importo, dal giorno prima a 6 giorni dopo l'acquisto (prima quello che cita il negozio). Gira al
   salvataggio e a ogni sincronizzazione della banca; dal dettaglio si può scollegare o scegliere a mano.
-- **Lettura e consigli:** la Edge Function `yrols-scontrini` (secret `ANTHROPIC_API_KEY`) legge la foto con
-  Claude e confronta i prodotti con il listino `yrols.grocery_prices` dei supermercati della zona. Senza la
-  chiave lo scontrino si salva lo stesso, inserendo il totale a mano. Il listino si aggiorna a mano o dal
-  controllo periodico di Claude; ogni prezzo ha fonte e data.
+- **Lettura e consigli (gratis):** la Edge Function `yrols-scontrini` legge la foto con un servizio AI dal
+  piano gratuito, senza carta di credito, e confronta i prodotti con il listino `yrols.grocery_prices` dei
+  supermercati della zona. Basta uno dei due secret su Supabase (*Edge Functions → Secrets*):
+  - `GROQ_API_KEY` da [console.groq.com/keys](https://console.groq.com/keys) (modello `GROQ_MODEL`, predefinito `qwen/qwen3.8-27b`);
+  - `GEMINI_API_KEY` da [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (modello `GEMINI_MODEL`,
+    predefinito `gemini-3.8-flash`; sul piano gratuito Google può usare i dati per migliorare i suoi servizi).
+
+  Con entrambe si prova prima Groq e, se la quota del giorno è finita, Gemini. Senza chiave lo scontrino si
+  salva lo stesso, inserendo il totale a mano. Il listino si aggiorna a mano o dal controllo periodico di
+  Claude; ogni prezzo ha fonte e data.
 
 ## Test
 

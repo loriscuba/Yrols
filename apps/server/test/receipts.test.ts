@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeReading, pricesForPrompt, savings, READING_SCHEMA } from "../../../supabase/functions/_shared/receipts.ts";
+import { extractJson, normalizeReading, pricesForPrompt, savings, READING_SCHEMA } from "../../../supabase/functions/_shared/receipts.ts";
 
 // Scontrino inventato: i test non usano mai scontrini reali (il repo è pubblico).
 const raw = {
@@ -51,4 +51,10 @@ test("listino per Claude e schema della risposta", () => {
   assert.equal(pricesForPrompt([{ store: "Lidl", product: "Banane", detail: null, price: 1.49, unit: "kg", unit_price: 1.49, checked_on: "2026-11-16" }]),
     "Lidl | Banane |  | 1.49 € | 1.49 €/kg | rilevato 2026-11-16");
   assert.deepEqual([...READING_SCHEMA.required].sort(), Object.keys(READING_SCHEMA.properties).sort());
+});
+
+test("extractJson: risposta con blocco di codice o testo intorno", () => {
+  assert.deepEqual(extractJson('```json\n{"total": 4.2}\n```'), { total: 4.2 });
+  assert.deepEqual(extractJson('Ecco: {"a": {"b": 1}} fine'), { a: { b: 1 } });
+  assert.throws(() => extractJson("niente"));
 });
