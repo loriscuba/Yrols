@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, KeyRound, Landmark, Plus, RefreshCw, Search } from "lucide-react";
+import { CheckCircle2, Landmark, Plus, RefreshCw, Search } from "lucide-react";
 import { useData } from "../hooks";
 import type { Account, Connection, Transaction } from "../api";
 import { date, daysUntil, money, dateTime } from "../format";
-import { Card, DueBadge, Empty, ErrorBanner, Modal, Stat } from "../components/ui";
+import { Card, DueBadge, Empty, ErrorBanner, Modal } from "../components/ui";
+import { BankBadge, BankDot, bankBrand, bankStyle } from "../components/BankBrand";
 import { bankAuthAvailable, completeBankAuth, listBanks, startBankAuth, type BankOption } from "../bankAuth";
 
 type Notice = { kind: "ok" | "error"; text: string; retry30?: { bankName: string; country: string } };
@@ -95,10 +96,15 @@ export function BanksPage() {
       ) : (
         <>
           <div className="stats">
-            <Stat label="Totale sui conti" value={money(total)} />
+            <div className="stat">
+              <div className="stat-label">Totale sui conti</div>
+              <div className="stat-value">{money(total)}</div>
+              <SplitBar accounts={visible} total={total} />
+            </div>
             {visible.map((a) => (
-              <button key={a.id} className={`stat stat-btn ${accountId === a.id ? "on" : ""}`} onClick={() => setAccountId(accountId === a.id ? "" : a.id)}>
-                <div className="stat-label">{a.bankName ?? "Banca"} · {a.name ?? a.iban ?? a.id}</div>
+              <button key={a.id} className={`stat stat-btn ${bankBrand(a.bankName) ? "bank-tinted" : ""} ${accountId === a.id ? "on" : ""}`}
+                style={bankStyle(a.bankName)} aria-pressed={accountId === a.id} onClick={() => setAccountId(accountId === a.id ? "" : a.id)}>
+                <div className="stat-bank"><BankBadge name={a.bankName} size={24} /><span className="stat-label">{a.bankName ?? "Banca"} · {a.name ?? a.iban ?? a.id}</span></div>
                 <div className="stat-value">{money(a.balance, a.currency)}</div>
                 <div className="stat-hint">{a.iban ? `…${a.iban.slice(-4)}` : ""}{a.balanceDate ? ` · saldo al ${date(a.balanceDate)}` : ""}</div>
               </button>
@@ -112,7 +118,7 @@ export function BanksPage() {
                   const expiring = !!c.validUntil && daysUntil(c.validUntil) <= 14;
                   return (
                     <li key={c.id} className="row">
-                      <span className="row-icon"><KeyRound size={16} aria-hidden /></span>
+                      <BankBadge name={c.bankName} />
                       <span className="row-main">
                         <span className="row-title">{c.bankName ?? c.id}</span>
                         <span className="row-sub">{c.validUntil ? `Consenso valido fino al ${date(c.validUntil)}` : "Consenso attivo"}</span>
@@ -142,8 +148,8 @@ export function BanksPage() {
                     {txs.data?.map((t) => (
                       <tr key={t.accountId + t.id}>
                         <td className="nowrap">{date(t.bookingDate, { day: "2-digit", month: "short" })}</td>
-                        <td><div className="cell-title">{t.counterparty ?? t.description}</div>{t.counterparty && <div className="cell-sub">{t.description}</div>}{t.status === "PDNG" && <span className="badge neutral">In attesa</span>}</td>
-                        <td className="hide-sm cell-sub">{t.accountName ?? t.accountId}</td>
+                        <td><div className="cell-title"><span className="show-sm"><BankDot name={t.bankName} /></span>{t.counterparty ?? t.description}</div>{t.counterparty && <div className="cell-sub">{t.description}</div>}{t.status === "PDNG" && <span className="badge neutral">In attesa</span>}</td>
+                        <td className="hide-sm cell-sub"><span className="cell-bank"><BankDot name={t.bankName} />{t.accountName ?? t.accountId}</span></td>
                         <td className={`right num ${t.amount > 0 ? "pos" : ""}`}>{t.amount > 0 ? "+" : ""}{money(t.amount, t.currency)}</td>
                       </tr>
                     ))}
@@ -155,6 +161,20 @@ export function BanksPage() {
         </>
       )}
       {picker && <BankPicker busy={busy} onClose={() => setPicker(false)} onPick={(b) => start({ bankName: b.name, country: b.country }, "pick")} />}
+    </div>
+  );
+}
+
+/** Barra sottile con la ripartizione del totale tra i conti, nei colori delle banche. */
+function SplitBar({ accounts, total }: { accounts: Account[]; total: number }) {
+  const parts = accounts.filter((a) => (a.balance ?? 0) > 0);
+  if (parts.length < 2 || total <= 0) return null;
+  return (
+    <div className="split-bar" role="img" aria-label={parts.map((a) => `${a.bankName ?? "Banca"} ${Math.round(((a.balance ?? 0) / total) * 100)}%`).join(", ")}>
+      {parts.map((a) => (
+        <span key={a.id} style={{ flexGrow: a.balance ?? 0, background: bankBrand(a.bankName)?.color ?? "var(--text-muted)" }}
+          title={`${a.bankName ?? "Banca"} · ${a.name ?? ""}: ${Math.round(((a.balance ?? 0) / total) * 100)}%`} />
+      ))}
     </div>
   );
 }
