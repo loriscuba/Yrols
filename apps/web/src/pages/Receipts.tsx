@@ -215,7 +215,7 @@ function ReceiptDetail({ r, onClose, onChanged, onEdit, onReread }: { r: Receipt
       {s && s.cheaper.length > 0 && (
         <div className="receipt-block">
           <h3 className="mini-head">Dove costava meno</h3>
-          {s.stores[0] && s.stores[0].saving > 0 && (
+          {s.stores[0] && s.stores[0].saving > 0 && s.stores[0].covered >= 3 && (
             <p className="hint">Tutta la spesa da <strong>{s.stores[0].store}</strong>: circa {money(s.stores[0].total)} invece di {money(s.paid)} (−{money(s.stores[0].saving)}). Ogni prodotto dove costa meno: −{money(s.bestMix)}.</p>
           )}
           <div className="table-wrap">
