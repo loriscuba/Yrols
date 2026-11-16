@@ -1,0 +1,4 @@
+# Copia come ".envrc" (ignorato da git) e poi: direnv allow
+# Token GitHub fine-grained con accesso SOLO al repo loriscuba/Yrols
+# Permessi: Contents, Pull requests, Issues = Read and write; Actions = Read-only
+export GITHUB_MCP_TOKEN="github_pat_..."

@@ -10,3 +10,6 @@ data/
 *.key
 .env
 **/keys/
+
+# Token locali per Claude Code / MCP
+.envrc
