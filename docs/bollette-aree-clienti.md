@@ -5,7 +5,7 @@ fornitori in Chrome (con gli accessi già fatti dall'utente), scarica le fatture
 Claude non conosce né salva le password dei fornitori.
 
 ```
-Chrome sul PC (MyFastweb, MySorgenia, Iliad)
+Chrome sul PC (MyFastweb, MySorgenia)
    └─ PDF ─► Edge Function yrols-inbox (chiave personale) ─► bucket yrols-fatture/portale/<hash>.pdf
                                                            └► coda yrols.portal_files
 GitHub Actions "Lettura email" (ogni ora) ─► legge il PDF ─► bollette (source "portale") o proposta in "Da email"
@@ -37,7 +37,7 @@ Risposta `{ "ok": true, "duplicate": false }`.
 ## Lato PC (Windows)
 
 1. Claude desktop con l'accesso fatto, Chrome con l'estensione **Claude in Chrome**.
-2. In Chrome, accesso una volta a MyFastweb, MySorgenia e Area personale Iliad, con "ricordami".
+2. In Chrome, accesso una volta a MyFastweb e MySorgenia, con "ricordami".
 3. Impostazioni di Windows: il PC non va in sospensione.
 4. In Claude desktop, un'attività programmata settimanale che, per ogni fornitore, apre la pagina delle
    fatture, prende le fatture degli ultimi 60 giorni e le invia alla casella. Se una pagina chiede di nuovo
