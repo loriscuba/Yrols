@@ -1,0 +1,61 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@std/assert@1": "1.0.19",
+    "jsr:@std/internal@^1.0.12": "1.0.14"
+  },
+  "jsr": {
+    "@std/assert@1.0.19": {
+      "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
+      "dependencies": [
+        "jsr:@std/internal"
+      ]
+    },
+    "@std/internal@1.0.14": {
+      "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
+    }
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@electric-sql/pglite@~0.3.16",
+        "npm:concurrently@^9.1.0"
+      ]
+    },
+    "members": {
+      "apps/server": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@types/express@^4.17.21",
+            "npm:@types/mailparser@^3.4.5",
+            "npm:@types/node@^22.10.0",
+            "npm:express@^4.21.2",
+            "npm:imapflow@^1.7.8",
+            "npm:mailparser@^3.7.2",
+            "npm:pdfjs-dist@^4.10.38",
+            "npm:tsx@^4.19.2",
+            "npm:typescript@^5.7.2"
+          ]
+        }
+      },
+      "apps/web": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@supabase/supabase-js@^2.118.0",
+            "npm:@types/react-dom@^18.3.1",
+            "npm:@types/react@^18.3.12",
+            "npm:@vitejs/plugin-react@^4.3.4",
+            "npm:lucide-react@0.460",
+            "npm:pdfjs-dist@^4.10.38",
+            "npm:react-dom@^18.3.1",
+            "npm:react-router-dom@^6.28.0",
+            "npm:react@^18.3.1",
+            "npm:recharts@^2.13.3",
+            "npm:typescript@^5.7.2",
+            "npm:vite@^6.0.3"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -103,7 +103,7 @@ export class EbError extends Error {
 export class EnableBanking {
   constructor(private appId: string, private pem: string, private baseUrl = "https://api.enablebanking.com") {}
 
-  async request<T>(method: string, path: string, body?: unknown, query?: Record<string, string | undefined>): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown, query?: Record<string, string | undefined>, extraHeaders?: Record<string, string>): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(query ?? {})) if (v) url.searchParams.set(k, v);
     const res = await fetch(url, {
@@ -112,6 +112,7 @@ export class EnableBanking {
         Authorization: `Bearer ${await createJwt(this.appId, this.pem)}`,
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...extraHeaders,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(30_000),
@@ -144,20 +145,54 @@ export class EnableBanking {
 
   createSession(code: string) { return this.request<EbSession>("POST", "/sessions", { code }); }
   deleteSession(id: string) { return this.request("DELETE", `/sessions/${encodeURIComponent(id)}`); }
-  balances(uid: string) { return this.request<{ balances: EbBalance[] }>("GET", `/accounts/${encodeURIComponent(uid)}/balances`); }
+  /** `psu`: intestazioni dell'utente presente (vedi psuHeaders); senza, è una lettura in background (max 4 al giorno). */
+  balances(uid: string, psu?: Record<string, string>) {
+    return this.request<{ balances: EbBalance[] }>("GET", `/accounts/${encodeURIComponent(uid)}/balances`, undefined, undefined, psu);
+  }
 
-  async transactions(uid: string, dateFrom: string): Promise<EbTransaction[]> {
+  async transactions(uid: string, dateFrom: string, psu?: Record<string, string>): Promise<EbTransaction[]> {
     const all: EbTransaction[] = [];
     let key: string | undefined;
     for (let page = 0; page < 50; page++) {
       const r = await this.request<{ transactions: EbTransaction[]; continuation_key?: string | null }>(
-        "GET", `/accounts/${encodeURIComponent(uid)}/transactions`, undefined, { date_from: dateFrom, continuation_key: key });
+        "GET", `/accounts/${encodeURIComponent(uid)}/transactions`, undefined, { date_from: dateFrom, continuation_key: key }, psu);
       all.push(...(r.transactions ?? []));
       if (!r.continuation_key || r.continuation_key === key) break;
       key = r.continuation_key;
     }
     return all;
   }
+}
+
+// ── Utente presente (PSD2) ──────────────────────────────────────────────────
+// Con le intestazioni Psu-* la banca sa che l'utente sta usando l'app: la lettura non rientra nel limite
+// di 4 accessi al giorno in background. Vanno mandate tutte o nessuna, e solo per letture chieste dall'utente.
+
+/** Ricava le intestazioni PSU dalla richiesta del browser; undefined se manca l'IP (allora non si può leggere "online"). */
+export function psuHeaders(req: Request): Record<string, string> | undefined {
+  const h = req.headers;
+  const ip = (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("cf-connecting-ip") ?? h.get("x-real-ip") ?? "").trim();
+  if (!ip) return undefined;
+  const out: Record<string, string> = { "Psu-Ip-Address": ip };
+  const copy: [string, string][] = [
+    ["user-agent", "Psu-User-Agent"], ["referer", "Psu-Referer"], ["accept-language", "Psu-Accept-language"],
+  ];
+  for (const [from, to] of copy) { const v = h.get(from)?.trim(); if (v) out[to] = v.slice(0, 500); }
+  out["Psu-Accept"] = "application/json";
+  return out;
+}
+
+/** Intervalli minimi tra due letture dall'app: all'apertura e col pulsante. */
+export const REFRESH_AUTO_MS = 30 * 60_000;
+export const REFRESH_MANUAL_MS = 2 * 60_000;
+
+/** Decide se leggere ora: null = sì, altrimenti i millisecondi da attendere. */
+export function refreshWait(lastSyncIso: string | null | undefined, auto: boolean, now = Date.now()): number | null {
+  if (!lastSyncIso) return null;
+  const elapsed = now - Date.parse(lastSyncIso);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return null;
+  const gap = auto ? REFRESH_AUTO_MS : REFRESH_MANUAL_MS;
+  return elapsed >= gap ? null : gap - elapsed;
 }
 
 // ── Normalizzazione (identica a connectors/enable-banking/src/normalize.ts) ─

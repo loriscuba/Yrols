@@ -5,19 +5,25 @@
 //   { action: "start", bankName, country, consentDays?, replaces? } → { url }
 //   { action: "complete", state, code? , error? }          → { bankName, country, accounts, validUntil, synced } | { bankName, country, error }
 //   { action: "disconnect", id }                          → { ok: true }
+//   { action: "refresh", auto? }                          → { refreshed, lastSync, newTransactions?, errors? } | { refreshed: false, reason, retryInSeconds }
+//     Legge saldi e movimenti con l'utente presente (intestazioni Psu-*: fuori dal limite PSD2 di 4 letture al giorno).
+//     auto=true (apertura dell'app): solo se l'ultimo aggiornamento ha più di 30 minuti; dal pulsante almeno 2 minuti.
 //
 // Secrets della funzione: EB_APP_ID, EB_PRIVATE_KEY (contenuto del .pem),
 // opzionali EB_REDIRECT_URL, EB_BASE_URL, YROLS_ALLOWED_ORIGINS.
 // SUPABASE_URL, SUPABASE_ANON_KEY e SUPABASE_SERVICE_ROLE_KEY sono forniti da Supabase.
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { accountName, EbError, EnableBanking, normalizeBalance, normalizeTransaction, type EbAccount } from "../_shared/enablebanking.ts";
+import {
+  accountName, EbError, EnableBanking, normalizeBalance, normalizeTransaction, psuHeaders, refreshWait, type EbAccount,
+} from "../_shared/enablebanking.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 const REDIRECT = env("EB_REDIRECT_URL") || "https://loriscuba.github.io/Yrols/callback/";
 const ORIGINS = (env("YROLS_ALLOWED_ORIGINS") || "https://loriscuba.github.io,http://localhost:5173").split(",").map((s) => s.trim());
 const PENDING_TTL_MS = 60 * 60 * 1000;
 const HISTORY_DAYS = 90;
+const REFRESH_DAYS = 14;
 
 class HttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -196,6 +202,71 @@ async function disconnect(body: Record<string, unknown>) {
   return { ok: true };
 }
 
+async function lastBankSync(db: ReturnType<typeof admin>): Promise<string | null> {
+  const rows = must(await db.from("bank_syncs").select("received_at").neq("source", "email").order("id", { ascending: false }).limit(1), "Lettura ultimo aggiornamento") as { received_at: string }[];
+  return rows?.[0]?.received_at ?? null;
+}
+
+async function countTransactions(db: ReturnType<typeof admin>): Promise<number | null> {
+  const { count, error } = await db.from("bank_transactions").select("id", { count: "exact", head: true });
+  return error ? null : count ?? null;
+}
+
+async function refresh(body: Record<string, unknown>, req: Request) {
+  const auto = body.auto === true;
+  const db = admin();
+  const last = await lastBankSync(db);
+  const wait = refreshWait(last, auto);
+  if (wait !== null) return { refreshed: false, reason: "recent", lastSync: last, retryInSeconds: Math.ceil(wait / 1000) };
+
+  const psu = psuHeaders(req);
+  if (!psu) throw new HttpError(400, "Non riesco a leggere l'indirizzo del dispositivo: riprova più tardi");
+
+  const now = new Date().toISOString();
+  const conns = must(await db.from("bank_connections").select("id,bank_name,valid_until").neq("status", "revoked"), "Lettura connessioni") as
+    { id: string; bank_name: string | null; valid_until: string | null }[];
+  const live = new Map(conns.filter((c) => !c.valid_until || c.valid_until > now).map((c) => [c.id, c]));
+  const accounts = (must(await db.from("bank_accounts").select("id,eb_uid,connection_id,bank_name").eq("source", "enablebanking"), "Lettura conti") as
+    { id: string; eb_uid: string | null; connection_id: string | null; bank_name: string | null }[])
+    .filter((a) => a.eb_uid && a.connection_id && live.has(a.connection_id));
+  if (!accounts.length) return { refreshed: false, reason: "no_accounts", lastSync: last };
+
+  const client = eb();
+  const dateFrom = new Date(Date.now() - REFRESH_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const balances: ReturnType<typeof normalizeBalance>[] = [];
+  const transactions: Awaited<ReturnType<typeof normalizeTransaction>>[] = [];
+  const errors: { bank: string; message: string }[] = [];
+  let okAccounts = 0;
+  // Conti in parallelo per banca, così l'attesa è quella della banca più lenta.
+  await Promise.all(accounts.map(async (a) => {
+    const bank = a.bank_name ?? "Banca";
+    try {
+      balances.push(...((await client.balances(a.eb_uid!, psu)).balances ?? []).map((b) => normalizeBalance(b, a.id)));
+      for (const t of await client.transactions(a.eb_uid!, dateFrom, psu)) transactions.push(await normalizeTransaction(t, a.id));
+      okAccounts++;
+    } catch (e) {
+      const status = e instanceof EbError ? e.status : 0;
+      const message = status === 429 ? "la banca chiede di riprovare più tardi"
+        : status === 401 || status === 403 || status === 422 ? "consenso da rinnovare dalla pagina Banche"
+        : "lettura non riuscita";
+      console.error(`refresh ${bank}: ${(e as Error).message}`);
+      if (!errors.some((x) => x.bank === bank)) errors.push({ bank, message });
+    }
+  }));
+  if (!okAccounts) return { refreshed: false, reason: "bank_error", lastSync: last, errors };
+
+  const before = await countTransactions(db);
+  // Il trigger su bank_transactions ricollega anche gli scontrini ai movimenti nuovi.
+  const synced = must(await db.rpc("yrols_bank_sync", {
+    payload: { source: "app", syncedAt: new Date().toISOString(), balances, transactions },
+  }), "Sincronizzazione");
+  const after = await countTransactions(db);
+  return {
+    refreshed: true, lastSync: new Date().toISOString(), synced, errors,
+    newTransactions: before !== null && after !== null ? Math.max(after - before, 0) : undefined,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(req) });
   if (req.method !== "POST") return json(req, 405, { error: "Usa POST" });
@@ -207,6 +278,7 @@ Deno.serve(async (req) => {
       case "start": return json(req, 200, await start(body, userId));
       case "complete": return json(req, 200, await complete(body));
       case "disconnect": return json(req, 200, await disconnect(body));
+      case "refresh": return json(req, 200, await refresh(body, req));
       default: throw new HttpError(400, "action non valida");
     }
   } catch (e) {
