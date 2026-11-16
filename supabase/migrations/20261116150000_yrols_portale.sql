@@ -1,4 +1,4 @@
--- Bollette scaricate dalle aree clienti dei fornitori (MyFastweb, MySorgenia, Iliad…) da un'attività
+-- Bollette scaricate dalle aree clienti dei fornitori (MyFastweb, MySorgenia…) da un'attività
 -- programmata di Claude desktop sul PC di casa. La Edge Function "yrols-inbox" riceve il PDF, lo salva nel
 -- bucket privato "yrols-fatture" (portale/<hash>.pdf) e lo mette in coda qui; la lettura su GitHub Actions
 -- lo legge e lo salva tra le bollette (o tra le proposte se mancano dati).
