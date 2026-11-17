@@ -386,3 +386,6 @@ details.receipt-block summary { cursor: pointer; color: var(--text-secondary); f
   background: var(--accent-soft); color: var(--accent); box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
 }
 .refresh-toast.critical { background: var(--critical-soft); color: var(--critical); border-radius: 12px; }
+.sync-info { display: inline-flex; align-items: flex-start; gap: 6px; }
+.sync-info svg { flex: none; margin-top: 4px; }
+.sync-info strong { font-weight: 600; color: var(--text-primary); }
