@@ -44,3 +44,27 @@ export const LABELS: Record<string, string> = {
   bassa: "Bassa", normale: "Normale", alta: "Alta",
 };
 export const label = (k: string | null | undefined) => (k ? LABELS[k] ?? k : "");
+
+/** "oggi alle 13:20", "ieri alle 19:05", "16 nov alle 08:00". */
+export function whenAt(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  const day = (x: Date) => x.toLocaleDateString("sv-SE");
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 864e5);
+  const prefix = day(d) === day(now) ? "oggi" : day(d) === day(yesterday) ? "ieri" : d.toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+  return `${prefix} alle ${time}`;
+}
+
+/** Orari (UTC) dell'aggiornamento automatico: cron "17 5,11,17,23 * * *" in .github/workflows/bank-sync.yml. */
+const AUTO_SYNC_UTC = [5, 11, 17, 23].map((h) => h * 60 + 17);
+
+/** Prossimo aggiornamento automatico previsto (GitHub può partire con qualche minuto di ritardo). */
+export function nextAutoSync(from = new Date()) {
+  const mins = from.getUTCHours() * 60 + from.getUTCMinutes();
+  const next = AUTO_SYNC_UTC.find((m) => m > mins);
+  const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+  d.setTime(d.getTime() + (next ?? AUTO_SYNC_UTC[0] + 24 * 60) * 60_000);
+  return d;
+}

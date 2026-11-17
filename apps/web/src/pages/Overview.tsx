@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Bell, CalendarClock, KeyRound, Landmark, Mail, ReceiptText } from "lucide-react";
 import { useData } from "../hooks";
+import { SyncInfo, useLastSync } from "../components/SyncInfo";
 import { currentMonth, useProjection } from "../projection";
 import type { Account, Overview } from "../api";
 import { BankBadge, bankBrand, bankStyle } from "../components/BankBrand";
@@ -14,6 +15,7 @@ const AGENDA_LINK = { bill: "/bollette", deadline: "/scadenze", consent: "/banch
 export function OverviewPage() {
   const { data, error } = useData<Overview>("/overview");
   const proj = useProjection();
+  const lastSync = useLastSync();
   const accounts = useData<Account[]>("/banks/accounts");
   const shownAccounts = (accounts.data ?? []).filter((a) => (a.balance ?? 0) !== 0);
   const month = proj.project(currentMonth());
@@ -36,7 +38,7 @@ export function OverviewPage() {
             </Link>
           )}
           <div className={`stats ${month && month.expected > 0 ? "five" : ""}`}>
-            <Stat label="Patrimonio sui conti" value={money(data.netWorth)} hint={`${data.accountsCount} ${data.accountsCount === 1 ? "conto" : "conti"}`} />
+            <Stat label="Patrimonio sui conti" value={money(data.netWorth)} hint={<>{data.accountsCount} {data.accountsCount === 1 ? "conto" : "conti"}{lastSync.data && <> · <SyncInfo last={lastSync.data} compact /></>}</>} />
             <Stat label="Entrate ultimi 30 giorni" value={money(data.last30.income)} />
             <Stat label="Uscite ultimi 30 giorni" value={money(data.last30.expenses)} />
             <Stat label="Da pagare entro 30 giorni" value={money(data.billsDueTotal)}

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Landmark, Plus, RefreshCw, Search } from "lucide-react";
 import { useData } from "../hooks";
+import { SyncInfo } from "../components/SyncInfo";
 import type { Account, Connection, Transaction } from "../api";
-import { date, daysUntil, money, dateTime } from "../format";
+import { date, daysUntil, money } from "../format";
 import { Card, DueBadge, Empty, ErrorBanner, Modal } from "../components/ui";
 import { BankBadge, BankDot, bankBrand, bankStyle } from "../components/BankBrand";
 import { bankAuthAvailable, completeBankAuth, listBanks, startBankAuth, type BankOption } from "../bankAuth";
@@ -74,7 +75,7 @@ export function BanksPage() {
       <header className="page-head">
         <div>
           <h1>Banche</h1>
-          <p className="sub">{lastSync.data ? `Ultimo aggiornamento ${dateTime(lastSync.data.receivedAt)}` : "Dati dal connettore Enable Banking"}</p>
+          <p className="sub">{lastSync.data ? <SyncInfo last={lastSync.data} /> : "Dati dal connettore Enable Banking"}</p>
         </div>
         {online && (
           <div className="head-actions">
