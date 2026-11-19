@@ -73,3 +73,16 @@ jobs:
         run: |
           case "$DAYS" in ''|*[!0-9]*) echo "days non valido"; exit 1;; esac
           node dist/src/cli.js sync --days="$DAYS"
+      # Scalable Capital (server MCP ufficiale, Edge Function yrols-scalable). Leggere almeno una volta
+      # al giorno tiene vivo l'accesso, che Scalable chiude dopo 24 ore senza richieste (e comunque dopo 7 giorni).
+      - name: Scalable Capital
+        if: always() && steps.cfg.outputs.ready == 'true'
+        working-directory: .
+        run: |
+          out=$(curl -sS -m 90 -X POST "$SUPABASE_URL/functions/v1/yrols-scalable" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" -d '{"action":"sync"}' -w '\n%{http_code}') || { echo "::warning::Scalable non raggiungibile"; exit 0; }
+          code=$(printf '%s' "$out" | tail -n1)
+          # Solo esito e conteggi: il log è pubblico.
+          printf '%s' "$out" | head -n -1 | jq -c '{synced, reason, accounts, holdings}' 2>/dev/null || true
+          if [ "$code" != "200" ]; then echo "::warning::Scalable: risposta $code"; fi
