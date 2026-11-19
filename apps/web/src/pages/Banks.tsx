@@ -9,6 +9,7 @@ import { BankBadge, BankDot, bankBrand, bankStyle } from "../components/BankBran
 import { bankAuthAvailable, completeBankAuth, listBanks, startBankAuth, type BankOption } from "../bankAuth";
 import { refreshBanks, useBankRefresh } from "../bankRefresh";
 import { ScalableCard } from "../components/ScalableCard";
+import { FundCard } from "../components/FundCard";
 import { completeScalable } from "../scalable";
 
 type Notice = { kind: "ok" | "error"; text: string; retry30?: { bankName: string; country: string } };
@@ -170,6 +171,7 @@ export function BanksPage() {
           )}
 
           {online && <ScalableCard busy={busy} setBusy={setBusy} reloadKey={scalableKey} onError={(text) => setNotice({ kind: "error", text })} onConnected={(text) => { setNotice({ kind: "ok", text }); reloadAll(); }} />}
+          {online && <FundCard reloadKey={scalableKey} onChanged={reloadAll} />}
 
           <Card title="Movimenti" action={
             <div className="search"><Search size={16} aria-hidden /><input placeholder="Cerca movimenti" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca movimenti" /></div>

@@ -28,7 +28,7 @@ export function ScalableCard({ busy, setBusy, onError, onConnected, reloadKey }:
 
   useEffect(() => {
     scalableStatus().then(setStatus, () => setStatus(null));
-    scalableHoldings().then(setHoldings, () => setHoldings([]));
+    scalableHoldings().then((h) => setHoldings(h.filter((x) => x.accountId.startsWith("scalable"))), () => setHoldings([]));
   }, [reloadKey, tick]);
   useEffect(() => {
     const on = () => setTick((t) => t + 1);

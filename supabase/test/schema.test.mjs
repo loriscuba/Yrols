@@ -278,3 +278,47 @@ test("Scalable: token invisibili, stato senza segreti, posizioni solo ai membri"
   const [{ b }] = await as("authenticated", LORIS, `select balance b from yrols.yrols_accounts where id = 'scalable-p-titoli'`);
   assert.equal(Number(b), 1005, "il valore del portafoglio entra tra i conti e nel patrimonio");
 });
+
+test("fondi: NAV dalla Action, rate PAC al primo NAV utile, correzione dal cruscotto", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  // Dati inventati (repo pubblico).
+  await as("service_role", null, `insert into yrols.funds (id, isin, name, quantity, cost, pac_amount, pac_day, pac_paid, pac_total, pac_next)
+    values ('fondo-x', 'IE0000000001', 'Fondo di prova', 10, 1000, 50, 20, 5, 999, '2026-11-20')`);
+  await assert.rejects(as("authenticated", LORIS, "select yrols.yrols_fund_sync('{}'::jsonb)"), /permission denied/);
+  await assert.rejects(as("authenticated", LORIS, "update yrols.funds set quantity = 1"), /permission denied/);
+
+  const sync = async (navs) => (await as("service_role", null, "select yrols.yrols_fund_sync($1::jsonb) r", [JSON.stringify({ navs })]))[0].r;
+  let r = await sync([{ isin: "IE0000000001", date: "2026-11-18", nav: 200, source: "fam" }]);
+  assert.equal(r.pac, 0, "la rata del 20 aspetta un NAV dal 20 in poi");
+  let [a] = await as("authenticated", LORIS, "select balance, \"bankName\", \"balanceDate\" from yrols.yrols_accounts where id = 'fondo-x'");
+  assert.equal(Number(a.balance), 2000);
+  assert.equal(a.bankName, "Fineco");
+
+  // Il 20 è sabato: niente NAV, si usa il primo successivo (23). Richiamare non ricompra.
+  r = await sync([{ isin: "IE0000000001", date: "2026-11-23", nav: 250, source: "ft" }]);
+  assert.equal(r.pac, 1);
+  r = await sync([{ isin: "IE0000000001", date: "2026-11-23", nav: 250, source: "fam" }]);
+  assert.equal(r.pac, 0);
+  let [f] = await as("authenticated", LORIS, "select quantity, cost, pac_paid, pac_next::text, last_nav_date::text from yrols.funds");
+  assert.equal(Number(f.quantity), 10.2);
+  assert.equal(Number(f.cost), 1050);
+  assert.equal(f.pac_paid, 6);
+  assert.equal(f.pac_next, "2026-12-20");
+  assert.equal(f.last_nav_date, "2026-11-23");
+  [a] = await as("authenticated", LORIS, "select balance from yrols.yrols_accounts where id = 'fondo-x'");
+  assert.equal(Number(a.balance), 2550);
+  const [p] = await as("authenticated", LORIS, "select nav_date::text, quantity from yrols.fund_pac_purchases");
+  assert.equal(p.nav_date, "2026-11-23");
+  assert.equal(Number(p.quantity), 0.2);
+  const [h] = await as("authenticated", LORIS, "select quantity, value from yrols.investment_holdings where account_id = 'fondo-x'");
+  assert.equal(Number(h.value), 2550);
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.funds")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.fund_navs"));
+
+  // Correzione con i dati di Fineco: quote e carico sostituiti, valore ricalcolato col NAV.
+  await assert.rejects(as("authenticated", OTHER, `select yrols.yrols_fund_update('fondo-x', '{"quantity": 1}'::jsonb)`), /non autorizzato/);
+  await as("authenticated", LORIS, `select yrols.yrols_fund_update('fondo-x', '{"quantity": 12, "cost": 1100, "pacNext": "2026-12-20"}'::jsonb)`);
+  [a] = await as("authenticated", LORIS, "select balance from yrols.yrols_accounts where id = 'fondo-x'");
+  assert.equal(Number(a.balance), 3000);
+});
