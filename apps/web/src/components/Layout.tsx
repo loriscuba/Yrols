@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, CalendarClock, CheckCircle2, RefreshCw, Home, Landmark, LogOut, Mail, ReceiptText, ShoppingCart, Moon, Sun, Repeat, Building2, PiggyBank, MoreHorizontal, X } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, RefreshCw, Home, Landmark, LogOut, Mail, ReceiptText, ShoppingCart, Moon, Sun, Repeat, Building2, PiggyBank, MoreHorizontal, ShieldCheck, X } from "lucide-react";
 import { supabase } from "../cloud";
+import { signOut } from "../security";
 import { useEffect, useState } from "react";
 import { refreshAvailable, refreshBanks, useBankRefresh } from "../bankRefresh";
 
@@ -49,6 +50,7 @@ const NAV = [
   { to: "/scadenze", label: "Scadenze", icon: CalendarClock },
   { to: "/promemoria", label: "Promemoria", icon: Bell },
   { to: "/email", label: "Da email", icon: Mail },
+  ...(supabase ? [{ to: "/sicurezza", label: "Sicurezza", icon: ShieldCheck }] : []),
 ];
 const linkClass = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : "");
 
@@ -78,7 +80,7 @@ export function Layout() {
   const tools = (
     <>
       {supabase && (
-        <button className="theme-btn" onClick={() => supabase!.auth.signOut()} aria-label="Esci">
+        <button className="theme-btn" onClick={() => signOut()} aria-label="Esci">
           <LogOut size={16} /><span>Esci</span>
         </button>
       )}

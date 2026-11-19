@@ -14,6 +14,14 @@ import { EmailPage } from "./pages/Email";
 import { SuppliersPage } from "./pages/Suppliers";
 import { SavingsPage } from "./pages/Savings";
 import { ReceiptsPage } from "./pages/Receipts";
+import { SecurityPage } from "./pages/Security";
+import { supabase } from "./cloud";
+
+// Anti-clickjacking: GitHub Pages non permette l'intestazione frame-ancestors, quindi niente cruscotto dentro un iframe.
+if (window.top !== window.self) {
+  document.body.textContent = "Yrols non può essere aperto dentro un'altra pagina.";
+  throw new Error("Caricamento in un iframe bloccato");
+}
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -31,6 +39,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="scadenze" element={<DeadlinesPage />} />
           <Route path="promemoria" element={<RemindersPage />} />
           <Route path="email" element={<EmailPage />} />
+          {supabase && <Route path="sicurezza" element={<SecurityPage />} />}
         </Route>
       </Routes>
     </BrowserRouter>
