@@ -6,12 +6,15 @@ import { Landmark } from "lucide-react";
  * - Fineco: blu istituzionale #00539F con la "F" gialla del marchio.
  * - Revolut: Deep Blue #1326FD e Light Blue #C6D9FD (linee guida Open Banking di Revolut),
  *   su fondo scuro come l'icona dell'app.
+ * - Scalable Capital: marchio bianco su nero (#101112, colore del sito); in grafici e tinte un grigio ardesia
+ *   che resta visibile anche nel tema scuro.
  * Le altre banche ricevono un colore neutro.
  */
 export interface BankBrand { key: string; color: string; ink: string; badge: string; mark: string }
 
 const BRANDS: (BankBrand & { match: RegExp })[] = [
   { key: "fineco", match: /fineco/i, color: "#00539F", ink: "#FFC20E", badge: "#00539F", mark: "F" },
+  { key: "scalable", match: /scalable/i, color: "#64748B", ink: "#FFFFFF", badge: "#101112", mark: "S" },
   { key: "revolut", match: /revolut/i, color: "#1326FD", ink: "#FFFFFF", badge: "#191C1F", mark: "R" },
 ];
 
