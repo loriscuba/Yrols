@@ -65,9 +65,12 @@ export async function registerClient(f: Fetch, redirectUri: string): Promise<str
       response_types: ["code"], token_endpoint_auth_method: "none", scope: SCOPE,
     }),
   });
-  const j = await r.json().catch(() => ({})) as Record<string, unknown>;
+  const text = await r.text();
+  let j: Record<string, unknown> = {};
+  try { j = JSON.parse(text); } catch { /* risposta non JSON */ }
   if (!r.ok || typeof j.client_id !== "string") {
-    throw new ScalableError(`Registrazione su Scalable non riuscita (${r.status}${j.error_description ? `: ${j.error_description}` : j.error ? `: ${j.error}` : ""})`, r.status);
+    const why = j.error_description ?? j.error ?? text.replace(/\s+/g, " ").slice(0, 160);
+    throw new ScalableError(`Registrazione su Scalable non riuscita (${r.status}${why ? `: ${why}` : ""})`, r.status);
   }
   return j.client_id;
 }

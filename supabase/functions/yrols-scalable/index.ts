@@ -242,7 +242,10 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     if (e instanceof HttpError) return json(req, e.status, { error: e.message });
-    if (e instanceof ScalableError) return json(req, 502, { error: e.message, upstreamStatus: e.status });
+    if (e instanceof ScalableError) {
+      console.error(`scalable: ${e.message}`);
+      return json(req, 502, { error: e.message, upstreamStatus: e.status });
+    }
     console.error((e as Error).message);
     return json(req, 500, { error: (e as Error).message });
   }

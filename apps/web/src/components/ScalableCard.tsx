@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { LineChart, RefreshCw, Unplug } from "lucide-react";
-import { Card } from "./ui";
+import { Card, ErrorBanner } from "./ui";
 import { BankBadge } from "./BankBrand";
 import { money, whenAt, date } from "../format";
 import { DATA_CHANGED } from "../bankRefresh";
@@ -18,6 +18,9 @@ export function ScalableCard({ busy, setBusy, onError, reloadKey }: {
   const [status, setStatus] = useState<ScalableStatus | null | undefined>(undefined);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [tick, setTick] = useState(0);
+  // L'errore si mostra anche qui: sul telefono il banner in cima alla pagina resta fuori schermo.
+  const [err, setErr] = useState<string | null>(null);
+  const fail = (msg: string) => { setErr(msg); onError(msg); };
 
   useEffect(() => {
     scalableStatus().then(setStatus, () => setStatus(null));
@@ -36,13 +39,13 @@ export function ScalableCard({ busy, setBusy, onError, reloadKey }: {
   const renewSoon = expired || (days !== null && days <= 1);
 
   const start = () => {
-    setBusy("scalable");
-    startScalable().catch((e: Error) => { setBusy(null); onError(e.message); });
+    setBusy("scalable"); setErr(null);
+    startScalable().catch((e: Error) => { setBusy(null); fail(e.message); });
   };
   const disconnect = () => {
     if (!confirm("Scollegare Scalable? I saldi già letti restano nello storico.")) return;
     setBusy("scalable-off");
-    disconnectScalable().then(() => setTick((t) => t + 1), (e: Error) => onError(e.message)).finally(() => setBusy(null));
+    disconnectScalable().then(() => setTick((t) => t + 1), (e: Error) => fail(e.message)).finally(() => setBusy(null));
   };
 
   const sub = connected
@@ -53,6 +56,7 @@ export function ScalableCard({ busy, setBusy, onError, reloadKey }: {
 
   return (
     <Card title="Scalable Capital" action={<LineChart size={18} aria-hidden />}>
+      <ErrorBanner message={err} />
       <ul className="list">
         <li className="row">
           <BankBadge name="Scalable Capital" />
