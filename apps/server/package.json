@@ -10,7 +10,8 @@
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "email:cloud": "tsx src/emailCloud.ts",
-    "portal:cloud": "tsx src/portalCloud.ts"
+    "portal:cloud": "tsx src/portalCloud.ts",
+    "funds:cloud": "tsx src/fundsCloud.ts"
   },
   "dependencies": {
     "express": "^4.21.2",

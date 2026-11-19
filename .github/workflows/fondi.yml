@@ -1,0 +1,33 @@
+# Fondi senza API (es. PAC Fineco): legge ogni giorno il NAV pubblico del fondo (pagina del gestore e FT Markets,
+# gratis e senza chiavi), conta le rate del PAC e aggiorna il valore nel cruscotto (yrols.yrols_fund_sync).
+# Secret richiesti: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Il repo è pubblico e i log anche: solo date e conteggi.
+name: Fondi
+
+on:
+  schedule:
+    # Due volte al giorno: il NAV esce in giornata con 1-2 giorni di ritardo, l'orario non è fisso.
+    - cron: "41 7,19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: funds-sync
+  cancel-in-progress: false
+
+jobs:
+  nav:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run funds:cloud -w apps/server
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
