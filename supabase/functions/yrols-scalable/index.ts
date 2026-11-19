@@ -18,7 +18,10 @@ import {
 } from "../_shared/scalable.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
-const REDIRECT = env("SCALABLE_REDIRECT_URL") || "https://loriscuba.github.io/Yrols/callback/";
+// Scalable accetta da client web solo indirizzi di ritorno della sua lista SaaS approvata: Yrols usa quindi
+// un indirizzo locale (loopback), come le app desktop. Dopo il login il browser mostra una pagina di errore
+// e l'utente incolla in Yrols il suo indirizzo, che contiene code e state.
+const REDIRECT = env("SCALABLE_REDIRECT_URL") || "http://127.0.0.1:53682/yrols-scalable";
 const ORIGINS = (env("YROLS_ALLOWED_ORIGINS") || "https://loriscuba.github.io,http://localhost:5173").split(",").map((s) => s.trim());
 const PENDING_TTL_MS = 30 * 60 * 1000;
 const AUTO_GAP_MS = 30 * 60 * 1000;

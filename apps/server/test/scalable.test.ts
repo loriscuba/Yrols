@@ -95,3 +95,12 @@ test("client MCP: 401 = accesso da rinnovare", async () => {
   const fake = (async () => new Response("no", { status: 401 })) as unknown as typeof fetch;
   await assert.rejects(new ScalableMcp("tok", fake).init(), (e: ScalableError) => e.needsLogin);
 });
+
+test("indirizzo incollato dopo il login (pagina locale 127.0.0.1)", async () => {
+  const { parsePasted } = await import("../../web/src/scalablePaste.ts");
+  assert.deepEqual(parsePasted(" 127.0.0.1:53682/yrols-scalable?code=abc&state=sc-xyz "), { state: "sc-xyz", code: "abc", error: undefined });
+  assert.deepEqual(parsePasted("http://127.0.0.1:53682/yrols-scalable?error=access_denied&state=sc-1"), { state: "sc-1", code: undefined, error: "access_denied" });
+  assert.equal(parsePasted("https://x/?code=1&state=gm-1"), null, "solo gli accessi Scalable");
+  assert.equal(parsePasted("http://127.0.0.1:53682/yrols-scalable?state=sc-1"), null);
+  assert.equal(parsePasted("boh"), null);
+});

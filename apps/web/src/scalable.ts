@@ -1,6 +1,7 @@
 /** Scalable Capital tramite il server MCP ufficiale, con la Edge Function Supabase "yrols-scalable". */
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "./cloud";
+export { parsePasted } from "./scalablePaste";
 
 export interface ScalableStatus {
   status: "active" | "expired" | "pending";
@@ -40,11 +41,32 @@ export async function scalableHoldings(): Promise<Holding[]> {
   return (data ?? []) as Holding[];
 }
 
-/** Porta l'utente sulla pagina di accesso di Scalable (conferma nell'app Scalable), poi si torna su /banche. */
-export async function startScalable() {
-  const { url } = await call<{ url: string }>({ action: "start" });
-  window.location.assign(url);
+const PASTE_KEY = "yrols-scalable-paste";
+const PASTE_TTL_MS = 30 * 60_000;
+
+/** Accesso avviato da meno di 30 minuti: la scheda mostra il campo dove incollare l'indirizzo. */
+export function pasteWaiting(): boolean {
+  try { return Date.now() - Number(localStorage.getItem(PASTE_KEY) || 0) < PASTE_TTL_MS; } catch { return false; }
 }
+export function clearPasteWaiting() { try { localStorage.removeItem(PASTE_KEY); } catch { /* ignora */ } }
+
+/**
+ * Apre la pagina di accesso di Scalable in una nuova scheda (conferma nell'app Scalable).
+ * Scalable rimanda poi a un indirizzo locale (http://127.0.0.1/...) che dà una pagina di errore:
+ * il suo indirizzo contiene il codice da incollare in Yrols. Se il browser blocca la nuova scheda, apre qui.
+ */
+export async function startScalable() {
+  const tab = window.open("", "_blank");
+  try {
+    const { url } = await call<{ url: string }>({ action: "start" });
+    try { localStorage.setItem(PASTE_KEY, String(Date.now())); } catch { /* ignora */ }
+    if (tab) tab.location.href = url; else window.location.assign(url);
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
+}
+
 
 export const completeScalable = (p: { state: string; code?: string; error?: string }) => call<ScalableSync>({ action: "complete", ...p });
 export const syncScalable = (auto = false) => call<ScalableSync>({ action: "sync", auto });

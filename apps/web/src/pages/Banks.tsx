@@ -123,7 +123,7 @@ export function BanksPage() {
         </Card>
       ) : null}
       {accounts.data && accounts.data.length === 0 && online && (
-        <ScalableCard busy={busy} setBusy={setBusy} reloadKey={scalableKey} onError={(text) => setNotice({ kind: "error", text })} />
+        <ScalableCard busy={busy} setBusy={setBusy} reloadKey={scalableKey} onError={(text) => setNotice({ kind: "error", text })} onConnected={(text) => { setNotice({ kind: "ok", text }); reloadAll(); }} />
       )}
       {accounts.data && accounts.data.length === 0 ? null : (
         <>
@@ -169,7 +169,7 @@ export function BanksPage() {
             </Card>
           )}
 
-          {online && <ScalableCard busy={busy} setBusy={setBusy} reloadKey={scalableKey} onError={(text) => setNotice({ kind: "error", text })} />}
+          {online && <ScalableCard busy={busy} setBusy={setBusy} reloadKey={scalableKey} onError={(text) => setNotice({ kind: "error", text })} onConnected={(text) => { setNotice({ kind: "ok", text }); reloadAll(); }} />}
 
           <Card title="Movimenti" action={
             <div className="search"><Search size={16} aria-hidden /><input placeholder="Cerca movimenti" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca movimenti" /></div>
