@@ -5,6 +5,7 @@ import { BankBadge } from "./BankBrand";
 import { money, whenAt, date } from "../format";
 import { DATA_CHANGED } from "../bankRefresh";
 import {
+  clearPasteWaiting, completeScalable, parsePasted, pasteWaiting,
   disconnectScalable, scalableDaysLeft, scalableHoldings, scalableStatus, startScalable, type Holding, type ScalableStatus,
 } from "../scalable";
 
@@ -12,8 +13,9 @@ import {
  * Scalable Capital tramite il server MCP ufficiale: stato dell'accesso (scade dopo 7 giorni),
  * pulsante Collega/Rinnova e posizioni del portafoglio. I saldi compaiono tra i conti della pagina.
  */
-export function ScalableCard({ busy, setBusy, onError, reloadKey }: {
-  busy: string | null; setBusy: (b: string | null) => void; onError: (msg: string) => void; reloadKey: number;
+export function ScalableCard({ busy, setBusy, onError, onConnected, reloadKey }: {
+  busy: string | null; setBusy: (b: string | null) => void; onError: (msg: string) => void;
+  onConnected: (text: string) => void; reloadKey: number;
 }) {
   const [status, setStatus] = useState<ScalableStatus | null | undefined>(undefined);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -21,6 +23,8 @@ export function ScalableCard({ busy, setBusy, onError, reloadKey }: {
   // L'errore si mostra anche qui: sul telefono il banner in cima alla pagina resta fuori schermo.
   const [err, setErr] = useState<string | null>(null);
   const fail = (msg: string) => { setErr(msg); onError(msg); };
+  const [waiting, setWaiting] = useState(pasteWaiting);
+  const [pasted, setPasted] = useState("");
 
   useEffect(() => {
     scalableStatus().then(setStatus, () => setStatus(null));
@@ -40,7 +44,19 @@ export function ScalableCard({ busy, setBusy, onError, reloadKey }: {
 
   const start = () => {
     setBusy("scalable"); setErr(null);
-    startScalable().catch((e: Error) => { setBusy(null); fail(e.message); });
+    startScalable().then(() => { setBusy(null); setWaiting(true); }, (e: Error) => { setBusy(null); fail(e.message); });
+  };
+  const finish = () => {
+    const p = parsePasted(pasted);
+    if (!p) { setErr("Non trovo il codice: incolla l'indirizzo completo della pagina di errore, quello che inizia con 127.0.0.1"); return; }
+    setBusy("scalable-complete"); setErr(null);
+    completeScalable(p).then((r) => {
+      clearPasteWaiting(); setWaiting(false); setPasted("");
+      if (r.error) fail(`Scalable: accesso non riuscito (${r.error}).`);
+      else if (r.syncError) fail(`Scalable collegato, ma la prima lettura non è riuscita: ${r.syncError}. Riprova con “Aggiorna ora”.`);
+      else onConnected(`Scalable collegato: ${r.accounts ?? 0} ${r.accounts === 1 ? "conto" : "conti"} e ${r.holdings ?? 0} posizioni lette. L'accesso va rinnovato tra 7 giorni.`);
+      setTick((t) => t + 1);
+    }, (e: Error) => fail(e.message)).finally(() => setBusy(null));
   };
   const disconnect = () => {
     if (!confirm("Scollegare Scalable? I saldi già letti restano nello storico.")) return;
@@ -73,8 +89,22 @@ export function ScalableCard({ busy, setBusy, onError, reloadKey }: {
           )}
         </li>
       </ul>
-      {!connected && !expired && (
-        <p className="hint">Prima attiva l'accesso sul sito di Scalable: Profilo → Sicurezza → Agentic Investing, livello "Sola lettura". Poi premi "Collega Scalable" e conferma l'accesso nell'app Scalable.</p>
+      {waiting && (
+        <div className="form" style={{ marginTop: ".75rem" }}>
+          <p className="hint wide">Dopo aver confermato nell'app Scalable si apre una pagina che non si carica (indirizzo 127.0.0.1): è normale. Copia il suo indirizzo dalla barra in alto e incollalo qui.</p>
+          <label className="field wide"><span>Indirizzo della pagina</span>
+            <input value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="127.0.0.1:53682/yrols-scalable?code=…" autoComplete="off" inputMode="url" />
+          </label>
+          <div className="wide" style={{ display: "flex", gap: ".5rem" }}>
+            <button className="btn primary" disabled={!!busy || !pasted.trim()} onClick={finish}>
+              <RefreshCw size={16} className={busy === "scalable-complete" ? "spin" : ""} />Completa collegamento
+            </button>
+            <button className="btn" disabled={!!busy} onClick={() => { clearPasteWaiting(); setWaiting(false); setPasted(""); }}>Annulla</button>
+          </div>
+        </div>
+      )}
+      {!connected && !expired && !waiting && (
+        <p className="hint">Prima attiva l'accesso sul sito di Scalable: Profilo → Sicurezza → Agentic Investing, livello "Sola lettura". Poi premi "Collega Scalable", conferma nell'app Scalable e incolla qui l'indirizzo della pagina che si apre.</p>
       )}
       {holdings.length > 0 && (
         <div className="table-wrap">
