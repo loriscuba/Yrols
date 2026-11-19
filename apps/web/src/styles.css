@@ -390,6 +390,21 @@ details.receipt-block summary { cursor: pointer; color: var(--text-secondary); f
 .sync-info svg { flex: none; margin-top: 4px; }
 .sync-info strong { font-weight: 600; color: var(--text-primary); }
 
+/* Sicurezza: codice a 6 cifre e pagina Sicurezza */
+.login-card.wide { max-width: 420px; }
+.modal .login-card { border: 0; box-shadow: none; padding: 0; max-width: none; background: none; }
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--text-secondary); }
+.otp-qr { align-self: center; width: 180px; height: 180px; background: #fff; padding: 8px; border-radius: 10px; }
+.otp-input { font-size: 22px; letter-spacing: 6px; text-align: center; font-variant-numeric: tabular-nums; }
+.otp-secret { font-size: 13px; color: var(--text-secondary); }
+.otp-secret code { display: block; margin-top: 6px; font-size: 14px; overflow-wrap: anywhere; user-select: all; color: var(--text-primary); }
+.security-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.security-list li { display: flex; gap: 8px; align-items: flex-start; }
+.security-list svg { flex: none; margin-top: 2px; color: var(--accent); }
+.stack { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.banner.warn { background: var(--warning-soft); color: var(--warning); margin-bottom: 8px; }
+.btn.danger { color: var(--critical); border-color: var(--critical); margin-top: 8px; }
+a.btn { text-decoration: none; color: inherit; justify-content: center; }
 /* Fondi (PAC Fineco) */
 .fund + .fund { border-top: 1px solid var(--grid); margin-top: 8px; padding-top: 8px; }
 .fund .right { text-align: right; }

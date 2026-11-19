@@ -10,8 +10,9 @@ const STUB = `
   create schema auth;
   create table auth.users (id uuid primary key);
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
+  create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('test.jwt', true), ''), '{}')::jsonb $$;
   grant usage on schema auth, public to anon, authenticated, service_role;
-  grant execute on function auth.uid() to anon, authenticated, service_role;
+  grant execute on function auth.uid(), auth.jwt() to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
@@ -23,8 +24,10 @@ async function setup() {
   const db = new PGlite();
   await db.exec(STUB);
   for (const f of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) await db.exec(readFileSync(new URL(f, dir), "utf8"));
-  const as = async (role, uid, sql, params) => {
-    await db.exec(`reset role; select set_config('test.uid', '${uid ?? ""}', false); set role ${role};`);
+  // Di norma la sessione ha già il codice a 6 cifre (aal2); aal1 = solo password.
+  const as = async (role, uid, sql, params, aal = uid ? "aal2" : "") => {
+    const jwt = aal ? JSON.stringify({ aal }) : "";
+    await db.exec(`reset role; select set_config('test.uid', '${uid ?? ""}', false); select set_config('test.jwt', '${jwt}', false); set role ${role};`);
     try { return (await db.query(sql, params)).rows; } finally { await db.exec("reset role"); }
   };
   return { db, as };
@@ -48,6 +51,18 @@ test("accesso: solo il proprietario, anon non vede nulla", async () => {
   assert.equal((await as("authenticated", OTHER, "select * from yrols.reminders")).length, 0);
   await assert.rejects(as("anon", null, "select * from yrols.reminders"));
   await assert.rejects(as("authenticated", OTHER, "insert into yrols.bills (provider, amount, due_date) values ('x', 1, current_date)"));
+});
+
+test("login: senza codice a 6 cifre (aal1) il proprietario non vede nulla", async () => {
+  const { as } = await setup();
+  assert.deepEqual(await as("authenticated", LORIS, "select yrols.yrols_claim() as ok", [], "aal1"), [{ ok: false }], "con la sola password non diventa proprietario");
+  assert.deepEqual(await as("authenticated", LORIS, "select yrols.yrols_claim() as ok"), [{ ok: true }]);
+  await as("authenticated", LORIS, "insert into yrols.reminders (text) values ('segreto')");
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.reminders", [], "aal1")).length, 0, "aal1 non legge");
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.reminders (text) values ('x')", [], "aal1"), "aal1 non scrive");
+  assert.deepEqual(await as("authenticated", LORIS, "select yrols.yrols_is_member() m", [], "aal1"), [{ m: false }]);
+  assert.deepEqual(await as("authenticated", LORIS, "select yrols.yrols_claim() as ok", [], "aal1"), [{ ok: false }]);
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.reminders")).length, 1, "aal2 legge");
 });
 
 test("sync bancaria: solo service_role, upsert, saldo preferito e bollette pagate", async () => {
