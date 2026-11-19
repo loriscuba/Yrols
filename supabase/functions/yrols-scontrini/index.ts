@@ -9,6 +9,8 @@
 // Secret della funzione (basta uno; se ci sono entrambi si prova prima Groq, poi Gemini):
 //   GROQ_API_KEY   (console.groq.com, gratis)       — modello GROQ_MODEL, predefinito qwen/qwen3.8-27b
 //   GEMINI_API_KEY (aistudio.google.com, gratis)    — modello GEMINI_MODEL, predefinito gemini-3.8-flash
+//   YROLS_API      chiave generica: il servizio si riconosce dal prefisso (gsk_ Groq, xai- Grok di xAI, AIza Gemini)
+//   XAI_API_KEY    (console.x.ai)                   — modello XAI_MODEL, predefinito grok-4.7
 // Opzionale YROLS_ALLOWED_ORIGINS.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -49,12 +51,19 @@ async function memberClient(req: Request) {
 /** Errore del servizio AI: quota del piano gratuito finita, chiave sbagliata o servizio giù. */
 class ProviderError extends Error { constructor(public status: number, public provider: string) { super(`${provider} ${status}`); } }
 
-async function askGroq(key: string, image: string, mediaType: string, listino: string): Promise<string> {
-  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+/** Servizi compatibili con l'API di OpenAI (Groq, xAI). */
+const OPENAI_LIKE = {
+  groq: { url: "https://api.groq.com/openai/v1/chat/completions", model: () => env("GROQ_MODEL") || "qwen/qwen3.8-27b" },
+  xai: { url: "https://api.x.ai/v1/chat/completions", model: () => env("XAI_MODEL") || "grok-4.7" },
+} as const;
+
+async function askOpenAiLike(name: keyof typeof OPENAI_LIKE, key: string, image: string, mediaType: string, listino: string): Promise<string> {
+  const svc = OPENAI_LIKE[name];
+  const r = await fetch(svc.url, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: env("GROQ_MODEL") || "qwen/qwen3.8-27b",
+      model: svc.model(),
       temperature: 0.1,
       max_completion_tokens: 8000,
       response_format: { type: "json_object" },
@@ -67,7 +76,7 @@ async function askGroq(key: string, image: string, mediaType: string, listino: s
       ],
     }),
   });
-  if (!r.ok) throw new ProviderError(r.status, "groq");
+  if (!r.ok) throw new ProviderError(r.status, name);
   const data = await r.json() as { choices?: { message?: { content?: string } }[] };
   return data.choices?.[0]?.message?.content ?? "";
 }
@@ -88,16 +97,33 @@ async function askGemini(key: string, image: string, mediaType: string, listino:
   return (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
 }
 
+type Provider = "groq" | "xai" | "gemini";
+/** Riconosce il servizio dal prefisso della chiave: gsk_ Groq, xai- Grok (xAI), AIza Gemini. */
+export function providerOf(key: string): Provider | null {
+  return key.startsWith("gsk_") ? "groq" : key.startsWith("xai-") ? "xai" : key.startsWith("AIza") ? "gemini" : null;
+}
+/** Chiavi disponibili, nell'ordine in cui provarle (senza doppioni). */
+function keys(): { name: Provider; key: string }[] {
+  const generic = env("YROLS_API").trim();
+  const list: { name: Provider; key: string }[] = [];
+  const add = (name: Provider | null, key: string) => { if (name && key && !list.some((k) => k.key === key)) list.push({ name, key }); };
+  add(providerOf(generic) ?? (generic ? "groq" : null), generic);
+  add("groq", env("GROQ_API_KEY").trim());
+  add("xai", env("XAI_API_KEY").trim());
+  add("gemini", env("GEMINI_API_KEY").trim());
+  return list;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(req) });
   if (req.method !== "POST") return json(req, 405, { error: "Usa POST" });
   try {
     const db = await memberClient(req);
-    const providers = [
-      env("GROQ_API_KEY") && { name: "groq", ask: (i: string, m: string, l: string) => askGroq(env("GROQ_API_KEY"), i, m, l) },
-      env("GEMINI_API_KEY") && { name: "gemini", ask: (i: string, m: string, l: string) => askGemini(env("GEMINI_API_KEY"), i, m, l) },
-    ].filter(Boolean) as { name: string; ask: (i: string, m: string, l: string) => Promise<string> }[];
-    if (!providers.length) throw new HttpError(503, "Lettura automatica non attiva: manca la chiave di Groq o Gemini. Inserisci il totale a mano.");
+    const providers = keys().map(({ name, key }) => ({
+      name,
+      ask: (i: string, m: string, l: string) => name === "gemini" ? askGemini(key, i, m, l) : askOpenAiLike(name, key, i, m, l),
+    }));
+    if (!providers.length) throw new HttpError(503, "Lettura automatica non attiva: manca la chiave di Groq, Grok o Gemini. Inserisci il totale a mano.");
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const image = typeof body.imageBase64 === "string" ? body.imageBase64.replace(/^data:[^,]*,/, "").replace(/\s+/g, "") : "";
