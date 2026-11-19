@@ -251,3 +251,30 @@ test("scontrini: collegati in automatico al movimento con lo stesso importo, sol
   await as("authenticated", LORIS, "insert into yrols.grocery_prices (store, product, price) values ('Lidl', 'Banane', 1.49)");
   assert.equal((await as("authenticated", OTHER, "select * from yrols.grocery_prices")).length, 0);
 });
+
+test("Scalable: token invisibili, stato senza segreti, posizioni solo ai membri", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  const [{ n }] = await as("authenticated", LORIS, "select yrols.yrols_scalable_status() is null as n");
+  assert.equal(n, true, "prima del collegamento non c'è stato");
+  await as("service_role", null, `insert into yrols.scalable_auth (client_id, redirect_uri, refresh_token, access_token, status, logged_in_at)
+    values ('cli', 'https://x/cb/', 'rt-segreto', 'at-segreto', 'active', now())`);
+  await assert.rejects(as("authenticated", LORIS, "select refresh_token from yrols.scalable_auth"), /permission denied/);
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.scalable_auth_pending (state, code_verifier) values ('sc-x', 'v')"), /permission denied/);
+  await assert.rejects(as("anon", null, "select yrols.yrols_scalable_status()"));
+  const [{ s }] = await as("authenticated", LORIS, "select yrols.yrols_scalable_status() s");
+  assert.equal(s.status, "active");
+  assert.ok(s.expiresAt, "scadenza stimata a 7 giorni");
+  assert.ok(!JSON.stringify(s).includes("segreto"), "i token non escono mai");
+  const [{ o }] = await as("authenticated", OTHER, "select yrols.yrols_scalable_status() o");
+  assert.equal(o, null);
+
+  await as("service_role", null, "insert into yrols.bank_accounts (id, connection_id, bank_name, name, source) values ('scalable-p-titoli', 'scalable', 'Scalable Capital', 'Portafoglio titoli', 'scalable')");
+  await as("service_role", null, "insert into yrols.bank_balances (account_id, type, date, amount) values ('scalable-p-titoli', 'VALU', current_date, 1005)");
+  await as("service_role", null, "insert into yrols.investment_holdings (account_id, isin, name, quantity, price, value) values ('scalable-p-titoli', 'IE00B4L5Y983', 'ETF', 10, 100.5, 1005)");
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.investment_holdings")).length, 1);
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.investment_holdings")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.investment_holdings"));
+  const [{ b }] = await as("authenticated", LORIS, `select balance b from yrols.yrols_accounts where id = 'scalable-p-titoli'`);
+  assert.equal(Number(b), 1005, "il valore del portafoglio entra tra i conti e nel patrimonio");
+});
