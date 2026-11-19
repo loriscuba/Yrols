@@ -134,7 +134,10 @@ ridotta a 1600 px, va nel bucket privato `yrols-scontrini`; i dati in `yrols.rec
   - `GEMINI_API_KEY` da [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (modello `GEMINI_MODEL`,
     predefinito `gemini-3.8-flash`; sul piano gratuito Google può usare i dati per migliorare i suoi servizi).
 
-  Con entrambe si prova prima Groq e, se la quota del giorno è finita, Gemini. Senza chiave lo scontrino si
+  - in alternativa una sola chiave nel secret `YROLS_API`: il servizio si riconosce dal prefisso
+    (`gsk_` Groq, `xai-` Grok di xAI con modello `XAI_MODEL` predefinito `grok-4.7`, `AIza` Gemini).
+
+  Con più chiavi si prova prima Groq e, se la quota del giorno è finita, Gemini. Senza chiave lo scontrino si
   salva lo stesso, inserendo il totale a mano. Il listino si aggiorna a mano o dal controllo periodico di
   Claude; ogni prezzo ha fonte e data.
 
