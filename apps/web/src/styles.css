@@ -299,6 +299,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .login-card h1 { margin: 4px 0 0; font-size: 22px; }
 .login-card .brand { padding: 0; display: flex; }
 .login-card .btn { justify-content: center; }
+.login-card .remember { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); cursor: pointer; }
+.login-card .remember input { width: 18px; height: 18px; accent-color: var(--accent, currentColor); }
+.sub.small { font-size: 12px; }
 .link-btn { border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 14px; padding: 4px; }
 
 /* Scelta banca */

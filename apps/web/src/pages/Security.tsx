@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Factor } from "@supabase/supabase-js";
-import { KeyRound, LogOut, Plus, ShieldCheck, Smartphone, Trash2 } from "lucide-react";
+import { Fingerprint, KeyRound, LaptopMinimal, LogOut, Plus, ShieldCheck, Smartphone, Trash2 } from "lucide-react";
 import { supabase } from "../cloud";
-import { IDLE_MINUTES, mfaError, signOut } from "../security";
+import {
+  deviceTrust, disableQuickUnlock, enableQuickUnlock, forgetDevice, IDLE_MINUTES, mfaError, quickUnlockAvailable, signOut, TRUST_DAYS, trustDevice,
+} from "../security";
 import { EnrollCode } from "../components/TwoFactor";
 import { Card, ErrorBanner, Modal } from "../components/ui";
 
@@ -49,7 +51,7 @@ export function SecurityPage() {
         <ul className="security-list">
           <li><ShieldCheck size={16} aria-hidden /><span>Password <b>e</b> codice a 6 cifre dall'app di autenticazione: la sola password non basta.</span></li>
           <li><ShieldCheck size={16} aria-hidden /><span>Un solo proprietario ({email || "il tuo account"}): non si possono creare altri account.</span></li>
-          <li><ShieldCheck size={16} aria-hidden /><span>Dopo {IDLE_MINUTES} minuti senza usare l'app esci da solo.</span></li>
+          <li><ShieldCheck size={16} aria-hidden /><span>Sui dispositivi ricordati resti dentro per {TRUST_DAYS} giorni, poi password e codice di nuovo. Sugli altri esci dopo {IDLE_MINUTES} minuti senza usare l'app.</span></li>
           <li><ShieldCheck size={16} aria-hidden /><span>I dati sono protetti nel database: senza codice non si legge nulla, nemmeno chiamando Supabase direttamente.</span></li>
         </ul>
       </Card>
@@ -68,6 +70,8 @@ export function SecurityPage() {
           ))}
         </ul>
       </Card>
+
+      <ThisDevice email={email} />
 
       <ChangePassword />
 
@@ -118,6 +122,55 @@ function ChangePassword() {
         {weak && <p className="sub">Almeno 12 caratteri, con lettere e numeri. Meglio ancora una frase lunga.</p>}
         <button className="btn primary" disabled={busy}><KeyRound size={16} />Cambia password</button>
       </form>
+    </Card>
+  );
+}
+
+/** Questo dispositivo: ricordato per 30 giorni e sblocco rapido con viso/impronta. */
+function ThisDevice({ email }: { email: string }) {
+  const [dev, setDev] = useState(deviceTrust);
+  const [canUnlock, setCanUnlock] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { quickUnlockAvailable().then(setCanUnlock); }, []);
+  const refresh = () => setDev(deviceTrust());
+  const trusted = dev.trustedUntil !== null && dev.trustedUntil > Date.now();
+
+  const toggleUnlock = async () => {
+    setErr(null);
+    if (dev.quickUnlock) { disableQuickUnlock(); return refresh(); }
+    try { await enableQuickUnlock(email); refresh(); }
+    catch (e) { setErr((e as Error).name === "NotAllowedError" ? "Attivazione annullata." : `Non attivato: ${(e as Error).message}`); }
+  };
+
+  return (
+    <Card title="Questo dispositivo">
+      <ErrorBanner message={err} />
+      <ul className="list">
+        <li className="row">
+          <span className="row-icon"><LaptopMinimal size={16} aria-hidden /></span>
+          <span className="row-main">
+            <span className="row-title">{trusted ? "Ricordato" : "Non ricordato"}</span>
+            <span className="row-sub">{trusted
+              ? `Resti dentro fino al ${fmt(new Date(dev.trustedUntil!).toISOString())}, poi password e codice.`
+              : `Esci da solo dopo ${IDLE_MINUTES} minuti senza usare l'app.`}</span>
+          </span>
+          {trusted
+            ? <button className="btn" onClick={() => { forgetDevice(); refresh(); }}>Dimentica</button>
+            : <button className="btn" onClick={() => { trustDevice(); refresh(); }}>Ricorda per {TRUST_DAYS} giorni</button>}
+        </li>
+        {canUnlock && trusted && (
+          <li className="row">
+            <span className="row-icon"><Fingerprint size={16} aria-hidden /></span>
+            <span className="row-main">
+              <span className="row-title">Sblocco con viso o impronta</span>
+              <span className="row-sub">{dev.quickUnlock
+                ? `Dopo ${IDLE_MINUTES} minuti di pausa l'app si blocca e si riapre con Face ID, Touch ID o impronta.`
+                : "Facoltativo: un blocco in più se qualcuno prende in mano il telefono sbloccato."}</span>
+            </span>
+            <button className="btn" onClick={toggleUnlock}>{dev.quickUnlock ? "Disattiva" : "Attiva"}</button>
+          </li>
+        )}
+      </ul>
     </Card>
   );
 }
