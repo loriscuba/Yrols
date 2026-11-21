@@ -4,6 +4,7 @@ import { supabase } from "../cloud";
 import { signOut } from "../security";
 import { useEffect, useState } from "react";
 import { refreshAvailable, refreshBanks, useBankRefresh } from "../bankRefresh";
+import { NotificationBell } from "./NotificationBell";
 
 /** Aggiorna i movimenti a ogni apertura dell'app (e al ritorno in primo piano), al massimo ogni 30 minuti. */
 function useRefreshOnOpen() {
@@ -132,7 +133,7 @@ export function Layout() {
           </div>
         </div>
       )}
-      <main className="content"><RefreshToast /><Outlet /></main>
+      <main className="content">{supabase && <NotificationBell />}<RefreshToast /><Outlet /></main>
     </div>
   );
 }
