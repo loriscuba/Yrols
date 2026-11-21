@@ -411,3 +411,56 @@ a.btn { text-decoration: none; color: inherit; justify-content: center; }
 .fund-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px 16px; margin: 6px 0 10px; }
 .fund-facts dt { color: var(--text-muted); font-size: 12px; }
 .fund-facts dd { margin: 2px 0 0; font-weight: 500; }
+
+/* Notifiche: campanella in alto a destra e pannello delle novità */
+.bell-btn {
+  position: fixed; top: calc(14px + env(safe-area-inset-top)); right: 18px; z-index: 26;
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-secondary); box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+}
+.bell-btn:hover, .bell-btn.active { color: var(--accent); border-color: var(--accent); }
+.bell-count {
+  position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--critical); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+/* Il titolo della pagina non finisce sotto la campanella. */
+.page-head { padding-right: 56px; }
+.bell-panel {
+  position: fixed; top: calc(62px + env(safe-area-inset-top)); right: 18px; z-index: 27; width: min(400px, calc(100vw - 24px));
+  max-height: calc(100vh - 90px - env(safe-area-inset-top)); display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.18); overflow: hidden;
+}
+.bell-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px 16px; border-bottom: 1px solid var(--grid); }
+.bell-head h2 { margin: 0; font-size: 16px; }
+.bell-list { overflow-y: auto; flex: 1 1 auto; min-height: 60px; padding: 4px 0; }
+.bell-empty { padding: 16px; }
+.bell-item {
+  display: flex; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 10px 16px; cursor: pointer; color: inherit; position: relative;
+}
+.bell-item:hover { background: var(--hover); }
+.bell-item.unread { background: var(--accent-soft); }
+.bell-item.unread::before { content: ""; position: absolute; left: 6px; top: 18px; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); }
+.bell-icon { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--neutral-soft); color: var(--text-secondary); }
+.bell-icon.k-movimento { color: var(--accent); }
+.bell-icon.k-portafoglio { color: var(--good); }
+.bell-icon.k-offerta { color: var(--series-2); }
+.bell-text { display: flex; flex-direction: column; min-width: 0; }
+.bell-title { font-weight: 600; font-size: 14px; }
+.bell-body { font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.bell-when { font-size: 12px; color: var(--text-muted); }
+.bell-push { border-top: 1px solid var(--grid); padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 8px; flex: none; }
+.bell-push-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.bell-push .btn { align-self: flex-start; }
+.bell-push .steps svg { vertical-align: -2px; }
+.bell-kinds { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+.bell-kind { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.bell-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .bell-btn { top: calc(10px + env(safe-area-inset-top)); right: 12px; }
+  .bell-panel { top: calc(56px + env(safe-area-inset-top)); right: 8px; left: 8px; width: auto;
+    max-height: calc(100vh - 140px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+}
+@media (max-width: 600px) {
+  .page-head { padding-right: 0; }
+  .page-head > :first-child { padding-right: 48px; }
+}
