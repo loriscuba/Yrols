@@ -8,7 +8,14 @@
   Le Action di GitHub usano `service_role` e non ne sono toccate.
 - **Un solo proprietario**: niente "Crea account" nell'app; `yrols_claim()` assegna il proprietario solo a tabella
   `yrols_members` vuota e con il codice.
-- **Uscita automatica** dopo 30 minuti senza usare l'app (`IDLE_MINUTES` in `apps/web/src/security.ts`).
+- **Dispositivo ricordato**: al login la casella "Ricorda questo dispositivo" (spuntata di serie) tiene la sessione
+  aperta per 30 giorni dall'ultimo accesso completo; poi di nuovo password e codice. Si attiva o si toglie anche dalla
+  pagina Sicurezza ("Questo dispositivo"). "Esci" e "Esci da tutti i dispositivi" lo dimenticano.
+- **Sblocco rapido** (facoltativo, solo su dispositivo ricordato): dopo 30 minuti di pausa l'app si blocca e si
+  riapre con Face ID / Touch ID / impronta (WebAuthn del dispositivo). È un blocco dello schermo locale, non sostituisce
+  password e codice: protegge da chi prende in mano il telefono già sbloccato.
+- **Uscita automatica** dopo 30 minuti senza usare l'app sui dispositivi non ricordati. Regole in
+  `apps/web/src/lockPolicy.ts` (`IDLE_MINUTES`, `TRUST_DAYS`), con test in `apps/server/test/lockPolicy.test.ts`.
 - **Pagina Sicurezza**: dispositivi con il codice (consigliato averne due), cambio password, "Esci da tutti i dispositivi".
 - **Protezioni della pagina**: Content-Security-Policy in `<meta>` (GitHub Pages non permette intestazioni HTTP):
   script solo dal sito, connessioni solo verso Supabase; la pagina non si apre dentro un iframe.
