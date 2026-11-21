@@ -7,6 +7,8 @@ import type { Account, Overview } from "../api";
 import { BankBadge, bankBrand, bankStyle } from "../components/BankBrand";
 import { date, money, dateTime, label } from "../format";
 import { Card, DueBadge, Empty, ErrorBanner, Stat } from "../components/ui";
+import { loadPension, type PensionFund } from "../pension";
+import { useEffect, useState } from "react";
 import { BillsByKind, MonthlyFlowsChart, NetWorthChart } from "../components/Charts";
 
 const AGENDA_ICON = { bill: ReceiptText, deadline: CalendarClock, consent: KeyRound };
@@ -19,6 +21,7 @@ export function OverviewPage() {
   const accounts = useData<Account[]>("/banks/accounts");
   const shownAccounts = (accounts.data ?? []).filter((a) => (a.balance ?? 0) !== 0);
   const month = proj.project(currentMonth());
+  const pension = usePension();
   const greeting = new Date().getHours() < 13 ? "Buongiorno" : new Date().getHours() < 18 ? "Buon pomeriggio" : "Buonasera";
 
   return (
@@ -37,7 +40,7 @@ export function OverviewPage() {
               {data.pendingEmail === 1 ? "1 bolletta o scadenza trovata nelle email" : `${data.pendingEmail} bollette o scadenze trovate nelle email`}: controlla e conferma
             </Link>
           )}
-          <div className={`stats ${month && month.expected > 0 ? "five" : ""}`}>
+          <div className={`stats ${(month && month.expected > 0) || pension ? "five" : ""}`}>
             <Stat label="Patrimonio sui conti" value={money(data.netWorth)} hint={<>{data.accountsCount} {data.accountsCount === 1 ? "conto" : "conti"}{lastSync.data && <> · <SyncInfo last={lastSync.data} compact /></>}</>} />
             <Stat label="Entrate ultimi 30 giorni" value={money(data.last30.income)} />
             <Stat label="Uscite ultimi 30 giorni" value={money(data.last30.expenses)} />
@@ -48,6 +51,15 @@ export function OverviewPage() {
                 <div className="stat-label">Spese ricorrenti</div>
                 <div className="stat-value">{money(month.expected)}</div>
                 <div className="stat-hint">{money(month.remaining)} da addebitare</div>
+              </Link>
+            )}
+            {pension?.total != null && (
+              <Link to="/fondo-pensione" className="stat stat-link">
+                <div className="stat-label">Fondo pensione</div>
+                <div className="stat-value">{money(pension.total)}</div>
+                <div className="stat-hint">
+                  {pension.result !== null && !pension.estimated ? `${pension.result >= 0 ? "+" : ""}${money(pension.result)} di rendimento` : pension.estimated ? `Stima al ${date(pension.totalDate)}` : `Al ${date(pension.totalDate)}`}
+                </div>
               </Link>
             )}
           </div>
@@ -124,4 +136,11 @@ export function OverviewPage() {
       )}
     </div>
   );
+}
+
+/** Totale del fondo pensione (fuori dal patrimonio sui conti: non è disponibile fino alla pensione). */
+function usePension() {
+  const [fund, setFund] = useState<PensionFund | null>(null);
+  useEffect(() => { loadPension().then((r) => setFund(r.fund), () => setFund(null)); }, []);
+  return fund;
 }
