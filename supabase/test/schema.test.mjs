@@ -337,3 +337,53 @@ test("fondi: NAV dalla Action, rate PAC al primo NAV utile, correzione dal crusc
   [a] = await as("authenticated", LORIS, "select balance from yrols.yrols_accounts where id = 'fondo-x'");
   assert.equal(Number(a.balance), 3000);
 });
+
+test("fondo pensione: Excel dei versamenti, sintesi PDF e stima tra le due", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  const imp = async (data, uid = LORIS) => (await as("authenticated", uid, "select yrols.yrols_pension_import('fgp', $1::jsonb) r", [JSON.stringify(data)]))[0].r;
+  const c = (year, period, total, status = "Quotato") => ({ year, period, total, employee: total / 4, employer: total / 4, tfr: total / 2, status, kind: "Contributo" });
+
+  await assert.rejects(imp({ contributions: [c(2026, 1, 100)] }, OTHER), /non autorizzato/);
+  await assert.rejects(imp({}), /nessun dato/);
+
+  // Solo Excel, nessuna sintesi: il totale è il versato, stimato.
+  let r = await imp({ name: "Fondo di prova", contributions: [c(2026, 2, 300, "Spesato"), c(2026, 1, 200), c(2026, 1, 100)] });
+  assert.equal(r.contributions, 3);
+  assert.equal(Number(r.paid), 600);
+  assert.equal(r.estimated, true);
+
+  // Sintesi PDF: totale esatto con quote e rendimento.
+  r = await imp({ position: { date: "2026-03-05", paid: 600, result: 50, total: 650, comparto: "Dinamico", units: 20, unitValue: 15,
+    unitValueDate: "2026-02-28", invested: 300, pending: 350, allocation: { Azioni: 60 } } });
+  assert.equal(Number(r.total), 650);
+  assert.equal(r.estimated, false);
+
+  // Nuovo Excel il mese dopo (versamenti saliti a 900): totale stimato = 650 + 300.
+  r = await imp({ contributions: [c(2026, 3, 300), c(2026, 2, 300), c(2026, 1, 200), c(2026, 1, 100)] });
+  assert.equal(Number(r.total), 950);
+  assert.equal(r.estimated, true);
+  const rowsNow = await as("authenticated", LORIS, "select seq, year, period, total from yrols.pension_contributions order by seq");
+  assert.equal(rowsNow.length, 4, "l'Excel sostituisce la storia salvata");
+
+  // Una sintesi più vecchia non sovrascrive; una più nuova torna esatta.
+  await imp({ position: { date: "2026-01-10", paid: 300, result: 1, total: 301 } });
+  let [f] = await as("authenticated", LORIS, "select total, pdf_date::text, comparto from yrols.pension_funds");
+  assert.equal(Number(f.total), 950);
+  assert.equal(f.pdf_date, "2026-03-05");
+  r = await imp({ position: { date: "2026-04-05", paid: 900, result: 80, total: 980, units: 60, unitValue: 16, invested: 960, pending: 20 } });
+  assert.equal(Number(r.total), 980);
+  assert.equal(r.estimated, false);
+  [f] = await as("authenticated", LORIS, "select paid, units, comparto, allocation from yrols.pension_funds");
+  assert.equal(Number(f.paid), 900);
+  assert.equal(Number(f.units), 60);
+  assert.equal(f.comparto, "Dinamico", "il comparto resta se il PDF non lo ripete");
+  assert.deepEqual(f.allocation, { Azioni: 60 });
+  const hist = await as("authenticated", LORIS, "select date::text, total, estimated from yrols.pension_history order by date");
+  assert.deepEqual(hist.filter((h) => !h.estimated).map((h) => [h.date, Number(h.total)]), [["2026-03-05", 650], ["2026-04-05", 980]]);
+
+  // Accessi: nessuna scrittura diretta, nessuna lettura per altri o anon.
+  await assert.rejects(as("authenticated", LORIS, "delete from yrols.pension_contributions"), /permission denied/);
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.pension_funds")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.pension_history"));
+});
