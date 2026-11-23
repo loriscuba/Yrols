@@ -8,6 +8,9 @@ import { Card, DueBadge, Empty, ErrorBanner, Modal } from "../components/ui";
 import { BankBadge, BankDot, bankBrand, bankStyle } from "../components/BankBrand";
 import { bankAuthAvailable, completeBankAuth, listBanks, startBankAuth, type BankOption } from "../bankAuth";
 import { refreshBanks, useBankRefresh } from "../bankRefresh";
+import { ScalableCard } from "../components/ScalableCard";
+import { FundCard } from "../components/FundCard";
+import { completeScalable } from "../scalable";
 
 type Notice = { kind: "ok" | "error"; text: string; retry30?: { bankName: string; country: string } };
 
@@ -22,7 +25,8 @@ export function BanksPage() {
   // Consensi solo per le banche con almeno un conto (una banca collegata e poi abbandonata non conta).
   const activeConnections = useMemo(() => {
     const used = new Set((accounts.data ?? []).map((a) => a.connectionId));
-    return (connections.data ?? []).filter((c) => c.status !== "revoked" && used.has(c.id));
+    // Scalable ha la sua scheda (accesso da rinnovare ogni 7 giorni, non un consenso PSD2).
+    return (connections.data ?? []).filter((c) => c.status !== "revoked" && used.has(c.id) && c.id !== "scalable");
   }, [accounts.data, connections.data]);
   // I sottoconti a saldo zero (es. valute non usate) non si mostrano.
   const visible = useMemo(() => (accounts.data ?? []).filter((a) => (a.balance ?? 0) !== 0 || a.id === accountId), [accounts.data, accountId]);
@@ -32,7 +36,8 @@ export function BanksPage() {
   const online = bankAuthAvailable();
   const refresh = useBankRefresh();
   const refreshing = refresh.status === "running";
-  const reloadAll = () => { accounts.reload(); connections.reload(); lastSync.reload(); txs.reload(); };
+  const [scalableKey, setScalableKey] = useState(0);
+  const reloadAll = () => { accounts.reload(); connections.reload(); lastSync.reload(); txs.reload(); setScalableKey((k) => k + 1); };
 
   const start = (opts: Parameters<typeof startBankAuth>[0], key: string) => {
     setBusy(key); setNotice(null);
@@ -44,6 +49,19 @@ export function BanksPage() {
   useEffect(() => {
     if (!online || handled.current) return;
     const qs = new URLSearchParams(location.search);
+    const scState = qs.get("sc_state");
+    if (scState) {
+      handled.current = true;
+      history.replaceState(null, "", location.pathname);
+      setBusy("complete");
+      completeScalable({ state: scState, code: qs.get("sc_code") ?? undefined, error: qs.get("sc_error") ?? undefined }).then((r) => {
+        if (r.error) setNotice({ kind: "error", text: `Scalable: accesso non riuscito (${r.error}).` });
+        else if (r.syncError) setNotice({ kind: "error", text: `Scalable collegato, ma la prima lettura non è riuscita: ${r.syncError}. Riprova con “Aggiorna ora”.` });
+        else setNotice({ kind: "ok", text: `Scalable collegato: ${r.accounts ?? 0} ${r.accounts === 1 ? "conto" : "conti"} e ${r.holdings ?? 0} posizioni lette. L'accesso va rinnovato tra 7 giorni.` });
+        reloadAll();
+      }, (e: Error) => setNotice({ kind: "error", text: e.message })).finally(() => setBusy(null));
+      return;
+    }
     const state = qs.get("eb_state");
     if (!state) return;
     handled.current = true;
@@ -104,7 +122,11 @@ export function BanksPage() {
               : <>Avvia il connettore Enable Banking e impostagli l'indirizzo di questo cruscotto e il token <code>YROLS_INGEST_TOKEN</code>: i conti compariranno qui alla prima sincronizzazione.</>}
           </Empty>
         </Card>
-      ) : (
+      ) : null}
+      {accounts.data && accounts.data.length === 0 && online && (
+        <ScalableCard busy={busy} setBusy={setBusy} reloadKey={scalableKey} onError={(text) => setNotice({ kind: "error", text })} onConnected={(text) => { setNotice({ kind: "ok", text }); reloadAll(); }} />
+      )}
+      {accounts.data && accounts.data.length === 0 ? null : (
         <>
           <div className="stats">
             <div className="stat">
@@ -147,6 +169,9 @@ export function BanksPage() {
               </ul>
             </Card>
           )}
+
+          {online && <ScalableCard busy={busy} setBusy={setBusy} reloadKey={scalableKey} onError={(text) => setNotice({ kind: "error", text })} onConnected={(text) => { setNotice({ kind: "ok", text }); reloadAll(); }} />}
+          {online && <FundCard reloadKey={scalableKey} onChanged={reloadAll} />}
 
           <Card title="Movimenti" action={
             <div className="search"><Search size={16} aria-hidden /><input placeholder="Cerca movimenti" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca movimenti" /></div>

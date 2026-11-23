@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "./cloud";
+import { syncScalable, type ScalableSync } from "./scalable";
 
 export const AUTO_GAP_MS = 30 * 60_000;
 const LAST_KEY = "yrols-bank-refresh";
@@ -51,6 +52,14 @@ export function describe(r: RefreshResponse): { kind: "done" | "error" | "info";
   return { kind: "error", text: errs ? `Aggiornamento non riuscito. ${errs}` : "Aggiornamento non riuscito" };
 }
 
+/** Nota su Scalable da aggiungere al messaggio, solo se c'è qualcosa da dire. */
+export function scalableNote(sc: ScalableSync): { text: string; error: boolean } | null {
+  if (sc.reason === "expired") return { text: "Scalable: accesso da rinnovare dalla pagina Banche", error: true };
+  // Gli altri errori (Scalable non collegato, server non raggiungibile) restano nella scheda Scalable della pagina Banche.
+  if (sc.synced) return { text: "Scalable aggiornato", error: false };
+  return null;
+}
+
 export function refreshBanks({ auto = false } = {}): Promise<RefreshState> {
   if (!supabase) return Promise.resolve(state);
   if (inFlight) return inFlight;
@@ -58,6 +67,8 @@ export function refreshBanks({ auto = false } = {}): Promise<RefreshState> {
   set({ status: "running", auto });
   inFlight = (async (): Promise<RefreshState> => {
     try {
+      // Scalable (server MCP) in parallelo alle banche: un suo errore non blocca i movimenti.
+      const scalable = syncScalable(auto).catch((e: Error): ScalableSync => ({ synced: false, error: e.message }));
       const { data, error } = await supabase!.functions.invoke("yrols-bank-auth", { body: { action: "refresh", auto } });
       if (error) {
         let msg = error.message;
@@ -69,9 +80,12 @@ export function refreshBanks({ auto = false } = {}): Promise<RefreshState> {
       }
       const r = data as RefreshResponse;
       writeLast(r.refreshed ? Date.now() : r.lastSync ? Date.parse(r.lastSync) : Date.now());
-      if (r.refreshed) dispatchEvent(new Event(DATA_CHANGED));
+      const sc = await scalable;
+      if (r.refreshed || sc.synced) dispatchEvent(new Event(DATA_CHANGED));
       const d = describe(r);
-      return { status: d.kind, auto, text: d.text, at: Date.now() };
+      const note = scalableNote(sc);
+      if (!note) return { status: d.kind, auto, text: d.text, at: Date.now() };
+      return { status: note.error ? "error" : d.kind, auto, text: `${d.text}. ${note.text}`, at: Date.now() };
     } catch (e) {
       return { status: "error", auto, text: `Aggiornamento non riuscito: ${(e as Error).message}`, at: Date.now() };
     }

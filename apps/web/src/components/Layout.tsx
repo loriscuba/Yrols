@@ -1,8 +1,10 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, CalendarClock, CheckCircle2, RefreshCw, Home, Landmark, LogOut, Mail, ReceiptText, ShoppingCart, Moon, Sun, Repeat, Building2, PiggyBank, MoreHorizontal, X, BarChart3 } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, RefreshCw, Home, Landmark, LogOut, Mail, ReceiptText, ShoppingCart, Moon, Sun, Repeat, Building2, PiggyBank, MoreHorizontal, ShieldCheck, Umbrella, X, BarChart3 } from "lucide-react";
 import { supabase } from "../cloud";
+import { signOut } from "../security";
 import { useEffect, useState } from "react";
 import { refreshAvailable, refreshBanks, useBankRefresh } from "../bankRefresh";
+import { NotificationBell } from "./NotificationBell";
 
 /** Aggiorna i movimenti a ogni apertura dell'app (e al ritorno in primo piano), al massimo ogni 30 minuti. */
 function useRefreshOnOpen() {
@@ -46,10 +48,12 @@ const NAV = [
   { to: "/scontrini", label: "Scontrini", icon: ShoppingCart, main: true },
   { to: "/fornitori", label: "Fornitori", icon: Building2 },
   { to: "/risparmio", label: "Risparmio", icon: PiggyBank, main: true },
+  ...(supabase ? [{ to: "/fondo-pensione", label: "Fondo pensione", icon: Umbrella }] : []),
   { to: "/statistiche", label: "Statistiche", icon: BarChart3 },
   { to: "/scadenze", label: "Scadenze", icon: CalendarClock },
   { to: "/promemoria", label: "Promemoria", icon: Bell },
   { to: "/email", label: "Da email", icon: Mail },
+  ...(supabase ? [{ to: "/sicurezza", label: "Sicurezza", icon: ShieldCheck }] : []),
 ];
 const linkClass = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : "");
 
@@ -79,7 +83,7 @@ export function Layout() {
   const tools = (
     <>
       {supabase && (
-        <button className="theme-btn" onClick={() => supabase!.auth.signOut()} aria-label="Esci">
+        <button className="theme-btn" onClick={() => signOut()} aria-label="Esci">
           <LogOut size={16} /><span>Esci</span>
         </button>
       )}
@@ -130,7 +134,7 @@ export function Layout() {
           </div>
         </div>
       )}
-      <main className="content"><RefreshToast /><Outlet /></main>
+      <main className="content">{supabase && <NotificationBell />}<RefreshToast /><Outlet /></main>
     </div>
   );
 }

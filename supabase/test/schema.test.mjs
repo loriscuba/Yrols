@@ -10,8 +10,9 @@ const STUB = `
   create schema auth;
   create table auth.users (id uuid primary key);
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
+  create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('test.jwt', true), ''), '{}')::jsonb $$;
   grant usage on schema auth, public to anon, authenticated, service_role;
-  grant execute on function auth.uid() to anon, authenticated, service_role;
+  grant execute on function auth.uid(), auth.jwt() to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
@@ -23,8 +24,10 @@ async function setup() {
   const db = new PGlite();
   await db.exec(STUB);
   for (const f of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) await db.exec(readFileSync(new URL(f, dir), "utf8"));
-  const as = async (role, uid, sql, params) => {
-    await db.exec(`reset role; select set_config('test.uid', '${uid ?? ""}', false); set role ${role};`);
+  // Di norma la sessione ha già il codice a 6 cifre (aal2); aal1 = solo password.
+  const as = async (role, uid, sql, params, aal = uid ? "aal2" : "") => {
+    const jwt = aal ? JSON.stringify({ aal }) : "";
+    await db.exec(`reset role; select set_config('test.uid', '${uid ?? ""}', false); select set_config('test.jwt', '${jwt}', false); set role ${role};`);
     try { return (await db.query(sql, params)).rows; } finally { await db.exec("reset role"); }
   };
   return { db, as };
@@ -48,6 +51,18 @@ test("accesso: solo il proprietario, anon non vede nulla", async () => {
   assert.equal((await as("authenticated", OTHER, "select * from yrols.reminders")).length, 0);
   await assert.rejects(as("anon", null, "select * from yrols.reminders"));
   await assert.rejects(as("authenticated", OTHER, "insert into yrols.bills (provider, amount, due_date) values ('x', 1, current_date)"));
+});
+
+test("login: senza codice a 6 cifre (aal1) il proprietario non vede nulla", async () => {
+  const { as } = await setup();
+  assert.deepEqual(await as("authenticated", LORIS, "select yrols.yrols_claim() as ok", [], "aal1"), [{ ok: false }], "con la sola password non diventa proprietario");
+  assert.deepEqual(await as("authenticated", LORIS, "select yrols.yrols_claim() as ok"), [{ ok: true }]);
+  await as("authenticated", LORIS, "insert into yrols.reminders (text) values ('segreto')");
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.reminders", [], "aal1")).length, 0, "aal1 non legge");
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.reminders (text) values ('x')", [], "aal1"), "aal1 non scrive");
+  assert.deepEqual(await as("authenticated", LORIS, "select yrols.yrols_is_member() m", [], "aal1"), [{ m: false }]);
+  assert.deepEqual(await as("authenticated", LORIS, "select yrols.yrols_claim() as ok", [], "aal1"), [{ ok: false }]);
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.reminders")).length, 1, "aal2 legge");
 });
 
 test("sync bancaria: solo service_role, upsert, saldo preferito e bollette pagate", async () => {
@@ -250,4 +265,204 @@ test("scontrini: collegati in automatico al movimento con lo stesso importo, sol
   // Listino supermercati: solo membri.
   await as("authenticated", LORIS, "insert into yrols.grocery_prices (store, product, price) values ('Lidl', 'Banane', 1.49)");
   assert.equal((await as("authenticated", OTHER, "select * from yrols.grocery_prices")).length, 0);
+});
+
+test("Scalable: token invisibili, stato senza segreti, posizioni solo ai membri", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  const [{ n }] = await as("authenticated", LORIS, "select yrols.yrols_scalable_status() is null as n");
+  assert.equal(n, true, "prima del collegamento non c'è stato");
+  await as("service_role", null, `insert into yrols.scalable_auth (client_id, redirect_uri, refresh_token, access_token, status, logged_in_at)
+    values ('cli', 'https://x/cb/', 'rt-segreto', 'at-segreto', 'active', now())`);
+  await assert.rejects(as("authenticated", LORIS, "select refresh_token from yrols.scalable_auth"), /permission denied/);
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.scalable_auth_pending (state, code_verifier) values ('sc-x', 'v')"), /permission denied/);
+  await assert.rejects(as("anon", null, "select yrols.yrols_scalable_status()"));
+  const [{ s }] = await as("authenticated", LORIS, "select yrols.yrols_scalable_status() s");
+  assert.equal(s.status, "active");
+  assert.ok(s.expiresAt, "scadenza stimata a 7 giorni");
+  assert.ok(!JSON.stringify(s).includes("segreto"), "i token non escono mai");
+  const [{ o }] = await as("authenticated", OTHER, "select yrols.yrols_scalable_status() o");
+  assert.equal(o, null);
+
+  await as("service_role", null, "insert into yrols.bank_accounts (id, connection_id, bank_name, name, source) values ('scalable-p-titoli', 'scalable', 'Scalable Capital', 'Portafoglio titoli', 'scalable')");
+  await as("service_role", null, "insert into yrols.bank_balances (account_id, type, date, amount) values ('scalable-p-titoli', 'VALU', current_date, 1005)");
+  await as("service_role", null, "insert into yrols.investment_holdings (account_id, isin, name, quantity, price, value) values ('scalable-p-titoli', 'IE00B4L5Y983', 'ETF', 10, 100.5, 1005)");
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.investment_holdings")).length, 1);
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.investment_holdings")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.investment_holdings"));
+  const [{ b }] = await as("authenticated", LORIS, `select balance b from yrols.yrols_accounts where id = 'scalable-p-titoli'`);
+  assert.equal(Number(b), 1005, "il valore del portafoglio entra tra i conti e nel patrimonio");
+});
+
+test("fondi: NAV dalla Action, rate PAC al primo NAV utile, correzione dal cruscotto", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  // Dati inventati (repo pubblico).
+  await as("service_role", null, `insert into yrols.funds (id, isin, name, quantity, cost, pac_amount, pac_day, pac_paid, pac_total, pac_next)
+    values ('fondo-x', 'IE0000000001', 'Fondo di prova', 10, 1000, 50, 20, 5, 999, '2026-11-20')`);
+  await assert.rejects(as("authenticated", LORIS, "select yrols.yrols_fund_sync('{}'::jsonb)"), /permission denied/);
+  await assert.rejects(as("authenticated", LORIS, "update yrols.funds set quantity = 1"), /permission denied/);
+
+  const sync = async (navs) => (await as("service_role", null, "select yrols.yrols_fund_sync($1::jsonb) r", [JSON.stringify({ navs })]))[0].r;
+  let r = await sync([{ isin: "IE0000000001", date: "2026-11-18", nav: 200, source: "fam" }]);
+  assert.equal(r.pac, 0, "la rata del 20 aspetta un NAV dal 20 in poi");
+  let [a] = await as("authenticated", LORIS, "select balance, \"bankName\", \"balanceDate\" from yrols.yrols_accounts where id = 'fondo-x'");
+  assert.equal(Number(a.balance), 2000);
+  assert.equal(a.bankName, "Fineco");
+
+  // Il 20 è sabato: niente NAV, si usa il primo successivo (23). Richiamare non ricompra.
+  r = await sync([{ isin: "IE0000000001", date: "2026-11-23", nav: 250, source: "ft" }]);
+  assert.equal(r.pac, 1);
+  r = await sync([{ isin: "IE0000000001", date: "2026-11-23", nav: 250, source: "fam" }]);
+  assert.equal(r.pac, 0);
+  let [f] = await as("authenticated", LORIS, "select quantity, cost, pac_paid, pac_next::text, last_nav_date::text from yrols.funds");
+  assert.equal(Number(f.quantity), 10.2);
+  assert.equal(Number(f.cost), 1050);
+  assert.equal(f.pac_paid, 6);
+  assert.equal(f.pac_next, "2026-12-20");
+  assert.equal(f.last_nav_date, "2026-11-23");
+  [a] = await as("authenticated", LORIS, "select balance from yrols.yrols_accounts where id = 'fondo-x'");
+  assert.equal(Number(a.balance), 2550);
+  const [p] = await as("authenticated", LORIS, "select nav_date::text, quantity from yrols.fund_pac_purchases");
+  assert.equal(p.nav_date, "2026-11-23");
+  assert.equal(Number(p.quantity), 0.2);
+  const [h] = await as("authenticated", LORIS, "select quantity, value from yrols.investment_holdings where account_id = 'fondo-x'");
+  assert.equal(Number(h.value), 2550);
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.funds")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.fund_navs"));
+
+  // Correzione con i dati di Fineco: quote e carico sostituiti, valore ricalcolato col NAV.
+  await assert.rejects(as("authenticated", OTHER, `select yrols.yrols_fund_update('fondo-x', '{"quantity": 1}'::jsonb)`), /non autorizzato/);
+  await as("authenticated", LORIS, `select yrols.yrols_fund_update('fondo-x', '{"quantity": 12, "cost": 1100, "pacNext": "2026-12-20"}'::jsonb)`);
+  [a] = await as("authenticated", LORIS, "select balance from yrols.yrols_accounts where id = 'fondo-x'");
+  assert.equal(Number(a.balance), 3000);
+});
+
+test("fondo pensione: Excel dei versamenti, sintesi PDF e stima tra le due", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  const imp = async (data, uid = LORIS) => (await as("authenticated", uid, "select yrols.yrols_pension_import('fgp', $1::jsonb) r", [JSON.stringify(data)]))[0].r;
+  const c = (year, period, total, status = "Quotato") => ({ year, period, total, employee: total / 4, employer: total / 4, tfr: total / 2, status, kind: "Contributo" });
+
+  await assert.rejects(imp({ contributions: [c(2026, 1, 100)] }, OTHER), /non autorizzato/);
+  await assert.rejects(imp({}), /nessun dato/);
+
+  // Solo Excel, nessuna sintesi: il totale è il versato, stimato.
+  let r = await imp({ name: "Fondo di prova", contributions: [c(2026, 2, 300, "Spesato"), c(2026, 1, 200), c(2026, 1, 100)] });
+  assert.equal(r.contributions, 3);
+  assert.equal(Number(r.paid), 600);
+  assert.equal(r.estimated, true);
+
+  // Sintesi PDF: totale esatto con quote e rendimento.
+  r = await imp({ position: { date: "2026-03-05", paid: 600, result: 50, total: 650, comparto: "Dinamico", units: 20, unitValue: 15,
+    unitValueDate: "2026-02-28", invested: 300, pending: 350, allocation: { Azioni: 60 } } });
+  assert.equal(Number(r.total), 650);
+  assert.equal(r.estimated, false);
+
+  // Nuovo Excel il mese dopo (versamenti saliti a 900): totale stimato = 650 + 300.
+  r = await imp({ contributions: [c(2026, 3, 300), c(2026, 2, 300), c(2026, 1, 200), c(2026, 1, 100)] });
+  assert.equal(Number(r.total), 950);
+  assert.equal(r.estimated, true);
+  const rowsNow = await as("authenticated", LORIS, "select seq, year, period, total from yrols.pension_contributions order by seq");
+  assert.equal(rowsNow.length, 4, "l'Excel sostituisce la storia salvata");
+
+  // Una sintesi più vecchia non sovrascrive; una più nuova torna esatta.
+  await imp({ position: { date: "2026-01-10", paid: 300, result: 1, total: 301 } });
+  let [f] = await as("authenticated", LORIS, "select total, pdf_date::text, comparto from yrols.pension_funds");
+  assert.equal(Number(f.total), 950);
+  assert.equal(f.pdf_date, "2026-03-05");
+  r = await imp({ position: { date: "2026-04-05", paid: 900, result: 80, total: 980, units: 60, unitValue: 16, invested: 960, pending: 20 } });
+  assert.equal(Number(r.total), 980);
+  assert.equal(r.estimated, false);
+  [f] = await as("authenticated", LORIS, "select paid, units, comparto, allocation from yrols.pension_funds");
+  assert.equal(Number(f.paid), 900);
+  assert.equal(Number(f.units), 60);
+  assert.equal(f.comparto, "Dinamico", "il comparto resta se il PDF non lo ripete");
+  assert.deepEqual(f.allocation, { Azioni: 60 });
+  const hist = await as("authenticated", LORIS, "select date::text, total, estimated from yrols.pension_history order by date");
+  assert.deepEqual(hist.filter((h) => !h.estimated).map((h) => [h.date, Number(h.total)]), [["2026-03-05", 650], ["2026-04-05", 980]]);
+
+  // Accessi: nessuna scrittura diretta, nessuna lettura per altri o anon.
+  await assert.rejects(as("authenticated", LORIS, "delete from yrols.pension_contributions"), /permission denied/);
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.pension_funds")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.pension_history"));
+});
+
+test("notifiche: movimenti, fondi, Scalable, fondo pensione e offerte, solo membri, niente doppioni", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  const list = async () => as("authenticated", LORIS, "select kind, title, body, url from yrols.notifications order by id");
+
+  // Movimenti: uno nuovo notificato, lo stesso risincronizzato no, uno vecchio (storico) no.
+  const old = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  const tx = (o) => ({ ...payload, transactions: [{ ...payload.transactions[0], ...o }] });
+  await as("service_role", null, "select yrols.yrols_bank_sync($1)", [tx({ status: "PDNG" })]);
+  await as("service_role", null, "select yrols.yrols_bank_sync($1)", [tx({})]);
+  await as("service_role", null, "select yrols.yrols_bank_sync($1)", [tx({ id: "t-old", bookingDate: old })]);
+  // Lo stesso movimento contabilizzato con un altro id non si ripete.
+  await as("service_role", null, "select yrols.yrols_bank_sync($1)", [tx({ id: "t1-book" })]);
+  await as("service_role", null, "select yrols.yrols_bank_sync($1)", [tx({ id: "t2", amount: 1500, description: "STIPENDIO" })]);
+  let n = await list();
+  assert.deepEqual(n, [
+    { kind: "movimento", title: "Uscita 82,10 €", body: "SDD ENEL ENERGIA · Fineco · in attesa", url: "/banche" },
+    { kind: "movimento", title: "Entrata 1.500,00 €", body: "STIPENDIO · Fineco", url: "/banche" },
+  ]);
+
+  // Fondo PAC: notifica al nuovo NAV, non quando il NAV non cambia.
+  await as("service_role", null, `insert into yrols.funds (id, isin, name, quantity, cost, pac_amount, pac_day, pac_paid, pac_total, pac_next)
+    values ('fondo-x', 'IE0000000001', 'Fondo PAC', 10, 1000, 0, null, 0, null, null)`);
+  const sync = (navs) => as("service_role", null, "select yrols.yrols_fund_sync($1::jsonb)", [JSON.stringify({ navs })]);
+  await sync([{ isin: "IE0000000001", date: "2026-11-18", nav: 200, source: "fam" }]);
+  await sync([{ isin: "IE0000000001", date: "2026-11-18", nav: 200, source: "fam" }]);
+  await sync([{ isin: "IE0000000001", date: "2026-11-19", nav: 210, source: "fam" }]);
+  n = (await list()).filter((x) => x.kind === "portafoglio");
+  assert.deepEqual(n.map((x) => x.body), ["Valore 2.000,00 € · NAV del 18/11", "Valore 2.100,00 € (+100,00 €) · NAV del 19/11"]);
+
+  // Scalable: una al giorno, col valore del portafoglio.
+  await as("service_role", null, "insert into yrols.bank_accounts (id, bank_name, name, source) values ('sc-titoli', 'Scalable Capital', 'Titoli', 'scalable')");
+  await as("service_role", null, "insert into yrols.bank_balances (account_id, type, date, amount) values ('sc-titoli', 'VALU', current_date - 1, 1000), ('sc-titoli', 'VALU', current_date, 1012.5)");
+  await as("service_role", null, "insert into yrols.scalable_auth (client_id, redirect_uri, status) values ('c', 'https://x/', 'active')");
+  await as("service_role", null, "update yrols.scalable_auth set last_sync_at = now()");
+  await as("service_role", null, "update yrols.scalable_auth set last_sync_at = now() + interval '1 hour'");
+  n = (await list()).filter((x) => x.title === "Scalable aggiornato");
+  assert.equal(n.length, 1);
+  assert.equal(n[0].body, "Valore 1.012,50 € (+12,50 €)");
+
+  // Fondo pensione.
+  await as("service_role", null, "insert into yrols.pension_funds (id, name, paid, total) values ('fgp', 'Fondo', 1000, 1100)");
+  await as("service_role", null, "update yrols.pension_funds set total = 1150, paid = 1050");
+  n = (await list()).filter((x) => x.url === "/fondo-pensione");
+  assert.deepEqual(n.map((x) => x.body), ["Totale 1.100,00 €", "Totale 1.150,00 € (+50,00 €)"]);
+
+  // Offerte: solo quelle che fanno risparmiare, e di nuovo se il prezzo scende.
+  const offer = (o) => ({ category: "luce", provider: "Octopus", name: "Flex", monthlyCost: 41.5, currentMonthly: 49.2, source: "Selectra", ...o });
+  await as("service_role", null, "select yrols.yrols_save_offers($1)", [{ offers: [offer({}), offer({ provider: "Cara", monthlyCost: 60 })] }]);
+  await as("service_role", null, "select yrols.yrols_save_offers($1)", [{ offers: [offer({})] }]);
+  await as("authenticated", LORIS, "update yrols.saving_offers set status = 'vista'");
+  await as("service_role", null, "select yrols.yrols_save_offers($1)", [{ offers: [offer({ monthlyCost: 38 })] }]);
+  n = (await list()).filter((x) => x.kind === "offerta");
+  assert.deepEqual(n.map((x) => x.body), ["Flex a 41,50 €/mese · risparmi 7,70 €/mese", "Flex a 38,00 €/mese · risparmi 11,20 €/mese"]);
+  assert.equal(n[0].title, "Nuova offerta luce: Octopus");
+
+  // Letture: solo il proprietario; può segnarle lette ma non cambiarle né crearle.
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.notifications")).length, 0);
+  await assert.rejects(as("anon", null, "select * from yrols.notifications"));
+  await assert.rejects(as("authenticated", LORIS, "update yrols.notifications set title = 'x'"), /permission denied/);
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.notifications (kind, title) values ('offerta', 'x')"), /permission denied/);
+  await assert.rejects(as("authenticated", OTHER, "select yrols.yrols_notifications_read()"), /non autorizzato/);
+  const [{ r }] = await as("authenticated", LORIS, "select yrols.yrols_notifications_read() r");
+  assert.equal(r, 9);
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.notifications where read_at is null")).length, 0);
+
+  // Push: chiavi e gettone solo a service_role; iscrizioni solo al proprietario; invio preso una volta sola.
+  await assert.rejects(as("authenticated", LORIS, "select * from yrols.push_config"), /permission denied/);
+  await assert.rejects(as("authenticated", LORIS, "select yrols.yrols_push_claim()"), /permission denied/);
+  await as("authenticated", LORIS, "insert into yrols.push_subscriptions (endpoint, p256dh, auth) values ('https://push.example/1', 'k', 'a')");
+  await assert.rejects(as("authenticated", OTHER, "insert into yrols.push_subscriptions (endpoint, p256dh, auth) values ('https://push.example/2', 'k', 'a')"));
+  await assert.rejects(as("authenticated", LORIS, "insert into yrols.push_subscriptions (endpoint, p256dh, auth) values ('http://push.example/3', 'k', 'a')"));
+  assert.equal((await as("authenticated", OTHER, "select * from yrols.push_subscriptions")).length, 0);
+  // Con un'iscrizione il trigger prova a chiamare yrols-push: qui pg_net non c'è e non deve dare errore.
+  await as("service_role", null, "select yrols.yrols_bank_sync($1)", [tx({ id: "t3", amount: -5, description: "CAFFE" })]);
+  assert.equal((await as("service_role", null, "select * from yrols.yrols_push_claim()")).length, 10);
+  assert.equal((await as("service_role", null, "select * from yrols.yrols_push_claim()")).length, 0);
 });

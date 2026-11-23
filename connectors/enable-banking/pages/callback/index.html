@@ -63,6 +63,15 @@
     location.replace(mail.toString());
     return;
   }
+  // Ritorno da Scalable Capital (server MCP ufficiale): lo "state" inizia con "sc-", si completa nella pagina Banche.
+  if (state && state.indexOf("sc-") === 0) {
+    var sc = new URL("../banche", location.href);
+    sc.searchParams.set("sc_state", state);
+    if (code) sc.searchParams.set("sc_code", code);
+    if (error) sc.searchParams.set("sc_error", q.get("error_description") || error);
+    location.replace(sc.toString());
+    return;
+  }
   // Flusso dall'app: il cruscotto (pagina Banche) completa il collegamento con la Edge Function.
   // Con ?manual=1 resta il vecchio flusso da terminale (comando "callback" del connettore).
   if (state && (code || error) && q.get("manual") !== "1") {
