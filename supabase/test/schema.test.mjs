@@ -466,3 +466,34 @@ test("notifiche: movimenti, fondi, Scalable, fondo pensione e offerte, solo memb
   assert.equal((await as("service_role", null, "select * from yrols.yrols_push_claim()")).length, 10);
   assert.equal((await as("service_role", null, "select * from yrols.yrols_push_claim()")).length, 0);
 });
+
+test("notifiche: giroconti tra i propri conti senza notifica, movimenti esterni sì", async () => {
+  const { as } = await setup();
+  await as("authenticated", LORIS, "select yrols.yrols_claim()");
+  const titles = async () => (await as("authenticated", LORIS, "select title || ' ' || body t from yrols.notifications order by id")).map((r) => r.t);
+  const sync = (transactions, accounts = []) => as("service_role", null, "select yrols.yrols_bank_sync($1)", [{ source: "enablebanking", accounts, transactions }]);
+  const t = (id, accountId, amount, description, counterparty) => ({ id, accountId, amount, bookingDate: today, description, counterparty });
+  const acc = [{ id: "rev", bankName: "Revolut", name: "Personale" }, { id: "joint", bankName: "Revolut", name: "Cointestato" }, { id: "fin", bankName: "Fineco", name: "Conto" }];
+
+  // Stessa lettura: le due metà del giroconto e uno spostamento tra salvadanai non notificano; il bar sì.
+  await sync([
+    t("g1", "rev", -400, "To Conto cointestato", "Cointestato"), t("g2", "joint", 400, "From Personale", "Personale"),
+    t("p1", "rev", -2, "To EUR Emergenze", null), t("p2", "rev", 188, "From Conto Deposito", null),
+    t("x1", "rev", -4.6, "Caffe", "Bar Roma"), t("x2", "rev", -120, "To Mario Rossi", "Mario Rossi"),
+  ], acc);
+  assert.deepEqual(await titles(), ["Uscita 4,60 € Bar Roma · Revolut", "Uscita 120,00 € Mario Rossi · Revolut"]);
+
+  // Ricarica Revolut con la carta Fineco: niente notifica né sulla ricarica né sull'addebito Fineco.
+  await sync([t("r1", "joint", 500, "Apple Pay Top-Up by *9709", null)]);
+  await sync([t("r2", "fin", -500, "Revolut**7181* Dublin IE Carta N. ***** 860", null)]);
+  await sync([t("c1", "fin", -150, "Giroconto sul cc n. 1", null), t("c2", "fin", -80, "ESTRATTO CONTO AL 30/10/26 CARTA DI CREDITO DI FINECOBANK", null)]);
+  assert.equal((await titles()).length, 2);
+
+  // L'altra metà arriva in una lettura successiva: la notifica della prima metà sparisce.
+  await sync([t("b1", "fin", -300, "Bonifico a me stesso", "Io")]);
+  assert.equal((await titles()).length, 3);
+  await sync([t("b2", "rev", 300, "Bonifico in arrivo", "Io")]);
+  assert.deepEqual(await titles(), ["Uscita 4,60 € Bar Roma · Revolut", "Uscita 120,00 € Mario Rossi · Revolut"]);
+  // Restano tutti tra i movimenti.
+  assert.equal((await as("authenticated", LORIS, "select * from yrols.yrols_transactions")).length, 12);
+});
