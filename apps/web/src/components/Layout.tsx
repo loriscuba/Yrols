@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, CalendarClock, CheckCircle2, RefreshCw, Home, Landmark, LogOut, Mail, ReceiptText, ShoppingCart, Moon, Sun, Repeat, Building2, PiggyBank, MoreHorizontal, ShieldCheck, Umbrella, X } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, RefreshCw, Home, Landmark, LogOut, Mail, ReceiptText, ShoppingCart, Moon, Sun, Repeat, Building2, PiggyBank, MoreHorizontal, ShieldCheck, Umbrella, X, BarChart3 } from "lucide-react";
 import { supabase } from "../cloud";
 import { signOut } from "../security";
 import { useEffect, useState } from "react";
@@ -49,6 +49,7 @@ const NAV = [
   { to: "/fornitori", label: "Fornitori", icon: Building2 },
   { to: "/risparmio", label: "Risparmio", icon: PiggyBank, main: true },
   ...(supabase ? [{ to: "/fondo-pensione", label: "Fondo pensione", icon: Umbrella }] : []),
+  { to: "/statistiche", label: "Statistiche", icon: BarChart3 },
   { to: "/scadenze", label: "Scadenze", icon: CalendarClock },
   { to: "/promemoria", label: "Promemoria", icon: Bell },
   { to: "/email", label: "Da email", icon: Mail },

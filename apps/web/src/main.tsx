@@ -14,6 +14,7 @@ import { EmailPage } from "./pages/Email";
 import { SuppliersPage } from "./pages/Suppliers";
 import { SavingsPage } from "./pages/Savings";
 import { ReceiptsPage } from "./pages/Receipts";
+import { StatsPage } from "./pages/Stats";
 import { PensionPage } from "./pages/Pension";
 import { SecurityPage } from "./pages/Security";
 import { supabase } from "./cloud";
@@ -37,6 +38,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="fornitori" element={<SuppliersPage />} />
           <Route path="risparmio" element={<SavingsPage />} />
           <Route path="scontrini" element={<ReceiptsPage />} />
+          <Route path="statistiche" element={<StatsPage />} />
           <Route path="scadenze" element={<DeadlinesPage />} />
           <Route path="promemoria" element={<RemindersPage />} />
           <Route path="email" element={<EmailPage />} />
