@@ -389,3 +389,13 @@ details.receipt-block summary { cursor: pointer; color: var(--text-secondary); f
 .sync-info { display: inline-flex; align-items: flex-start; gap: 6px; }
 .sync-info svg { flex: none; margin-top: 4px; }
 .sync-info strong { font-weight: 600; color: var(--text-primary); }
+
+/* Statistiche */
+.section-title { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 18px; font-weight: 600; }
+.trip-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.trip-chip { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.trip-chip:hover { background: var(--hover); }
+.trip-chip.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.trip-flag { font-size: 26px; line-height: 1; flex: none; }
+.btn.danger { color: var(--critical); margin-right: auto; }
+.form .search input { width: 100%; }
