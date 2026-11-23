@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart3, Eye, EyeOff, Pencil, Plane, Plus, Search, Trash2 } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, Eye, EyeOff, MapPin, Pencil, Plane, Plus, Search, Trash2 } from "lucide-react";
 import { cloudEnabled } from "../cloud";
 import { date, money, moneyShort, todayIso } from "../format";
 import { Card, Empty, ErrorBanner, Field, Modal, Stat } from "../components/ui";
-import { computeTrips, COUNTRIES, deleteTrip, flag, listTrips, loadMovements, saveTrip, type Trip, type TripResult } from "../stats";
+import { computeTrips, COUNTRIES, deleteTrip, flag, listTrips, loadMovements, saveTrip, type Trip, type TripLine, type TripResult, CATEGORY_LABELS } from "../stats";
 
 type Data = Awaited<ReturnType<typeof loadMovements>>;
 
@@ -35,10 +35,11 @@ export function StatsPage() {
   const current = results?.find((r) => String(r.trip.id) === sel) ?? results?.[results.length - 1] ?? null;
 
   // Togliere o rimettere un movimento si vede subito; il salvataggio va in sottofondo.
-  const toggle = async (trip: Trip, id: string, excluded: boolean) => {
-    const exclude = new Set(trip.config.exclude ?? []);
-    if (excluded) exclude.delete(id); else exclude.add(id);
-    const next = { ...trip, config: { ...trip.config, exclude: [...exclude] } };
+  const toggle = async (trip: Trip, l: TripLine) => {
+    const exclude = new Set(trip.config.exclude ?? []), include = new Set(trip.config.include ?? []);
+    if (l.excluded) { exclude.delete(l.id); if (l.autoExcluded) include.add(l.id); }
+    else { exclude.add(l.id); if (l.autoExcluded) include.delete(l.id); }
+    const next = { ...trip, config: { ...trip.config, exclude: [...exclude], include: [...include] } };
     setTrips((ts) => ts?.map((t) => (t.id === trip.id ? next : t)) ?? null);
     try { await saveTrip(next); } catch (e) { setErr((e as Error).message); reload(); }
   };
@@ -77,7 +78,7 @@ export function StatsPage() {
                   </button>
                 ))}
               </div>
-              {current && <TripDetail r={current} onEdit={() => setEdit(current.trip)} onToggle={(id, ex) => toggle(current.trip, id, ex)} />}
+              {current && <TripDetail r={current} onEdit={() => setEdit(current.trip)} onToggle={(l) => toggle(current.trip, l)} />}
             </>
           )}
         </>
@@ -90,10 +91,12 @@ export function StatsPage() {
   );
 }
 
-function TripDetail({ r, onEdit, onToggle }: { r: TripResult; onEdit: () => void; onToggle: (id: string, excluded: boolean) => void }) {
+function TripDetail({ r, onEdit, onToggle }: { r: TripResult; onEdit: () => void; onToggle: (l: TripLine) => void }) {
   const [showAll, setShowAll] = useState(false);
+  const [openCat, setOpenCat] = useState<string | null>(null);
   const maxCat = Math.max(...r.byCategory.map((c) => c.total), 1);
   const lines = showAll ? r.lines : r.lines.slice(0, 25);
+  const excludedCount = r.lines.filter((l) => l.excluded).length;
   return (
     <>
       <div className="stats">
@@ -104,15 +107,29 @@ function TripDetail({ r, onEdit, onToggle }: { r: TripResult; onEdit: () => void
       <div className="grid-2">
         <Card title="Per tipo di spesa" action={<button className="btn" onClick={onEdit}><Pencil size={14} />Modifica viaggio</button>}>
           {r.byCategory.length === 0 ? <p className="hint">Nessuna spesa in questo periodo.</p> : (
-            <ul className="hbars">
-              {r.byCategory.map((c) => (
-                <li key={c.category} title={`${c.label}: ${money(c.total)}`}>
-                  <span className="hbar-label">{c.label}</span>
-                  <span className="hbar-track"><span className="hbar-fill" style={{ width: `${(c.total / maxCat) * 100}%` }} /></span>
-                  <span className="hbar-value">{money(c.total)}</span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="hint">Tocca un tipo di spesa per vedere i movimenti.</p>
+              <ul className="hbars cat-bars">
+                {r.byCategory.map((c) => {
+                  const open = openCat === c.category;
+                  const items = r.lines.filter((l) => l.category === c.category && !l.excluded);
+                  return (
+                    <li key={c.category}>
+                      <button className="cat-row" aria-expanded={open} onClick={() => setOpenCat(open ? null : c.category)} title={`${c.label}: ${money(c.total)}`}>
+                        <span className="hbar-label">{open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}{c.label}</span>
+                        <span className="hbar-track"><span className="hbar-fill" style={{ width: `${(c.total / maxCat) * 100}%` }} /></span>
+                        <span className="hbar-value">{money(c.total)}</span>
+                      </button>
+                      {open && (
+                        <ul className="list cat-items">
+                          {items.map((l) => <MovementRow key={l.id} l={l} onToggle={onToggle} compact />)}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
         </Card>
         <Card title="Dove hai speso di più">
@@ -140,28 +157,45 @@ function TripDetail({ r, onEdit, onToggle }: { r: TripResult; onEdit: () => void
         </ResponsiveContainer>
       </Card>
       <Card title={`Movimenti del viaggio (${r.lines.length})`}>
-        <p className="hint">Tocca l'occhio per togliere dal conto una spesa che non c'entra col viaggio (o rimetterla).</p>
+        <p className="hint">Tocca un movimento per vedere cos'è e dov'eri. Con l'occhio lo togli dal conto (o lo rimetti){excludedCount ? `: ${excludedCount} ${excludedCount === 1 ? "è tolto" : "sono tolti"}, come gli acquisti online` : ""}.</p>
         <ul className="list">
-          {lines.map((l) => (
-            <li key={l.id} className={`row ${l.excluded ? "muted" : ""}`}>
-              <span className="row-main">
-                <span className="row-title">{l.merchant}</span>
-                <span className="row-sub">
-                  {shortDate(l.date)} · {l.bankName ?? l.accountName ?? "Conto"}
-                  {l.reason === "keyword" && <span className="badge neutral">prima/dopo il viaggio</span>}
-                  {l.reason === "manual" && <span className="badge neutral">aggiunto a mano</span>}
-                </span>
-              </span>
-              <span className={`num ${l.spent < 0 ? "pos" : ""}`}>{l.spent < 0 ? `+${money(-l.spent)}` : money(l.spent)}</span>
-              <button className="icon-btn" onClick={() => onToggle(l.id, l.excluded)} aria-label={l.excluded ? "Rimetti nel conto" : "Togli dal conto"} title={l.excluded ? "Rimetti nel conto" : "Togli dal conto"}>
-                {l.excluded ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </li>
-          ))}
+          {lines.map((l) => <MovementRow key={l.id} l={l} onToggle={onToggle} />)}
         </ul>
         {r.lines.length > 25 && <button className="btn" onClick={() => setShowAll(!showAll)}>{showAll ? "Mostra meno" : `Mostra tutti i ${r.lines.length}`}</button>}
       </Card>
     </>
+  );
+}
+
+function MovementRow({ l, onToggle, compact }: { l: TripLine; onToggle: (l: TripLine) => void; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className={`mov ${l.excluded ? "muted" : ""}`}>
+      <div className="row">
+        <button className="row-btn mov-main" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span className="row-main">
+            <span className="row-title">{l.merchant}</span>
+            <span className="row-sub">
+              {shortDate(l.date)}{!compact && <> · <span className={`badge cat-${l.category}`}>{CATEGORY_LABELS[l.category]}</span></>}
+              {l.reason === "keyword" && <span className="badge neutral">prima/dopo il viaggio</span>}
+              {l.reason === "manual" && <span className="badge neutral">aggiunto a mano</span>}
+              {l.autoExcluded && l.excluded && <span className="badge neutral">acquisto online</span>}
+            </span>
+          </span>
+          <span className={`num ${l.spent < 0 ? "pos" : ""}`}>{l.spent < 0 ? `+${money(-l.spent)}` : money(l.spent)}</span>
+        </button>
+        <button className="icon-btn" onClick={() => onToggle(l)} aria-label={l.excluded ? "Rimetti nel conto" : "Togli dal conto"} title={l.excluded ? "Rimetti nel conto" : "Togli dal conto"}>
+          {l.excluded ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </div>
+      {open && (
+        <div className="mov-detail">
+          <p>{l.info}</p>
+          <p className="hint">{date(l.date, { weekday: "long", day: "numeric", month: "long" })} · {l.bankName ?? l.accountName ?? "Conto"} · «{l.description}»</p>
+          {l.mapsUrl && <a className="btn" href={l.mapsUrl} target="_blank" rel="noopener noreferrer"><MapPin size={14} />Apri in Maps</a>}
+        </div>
+      )}
+    </li>
   );
 }
 

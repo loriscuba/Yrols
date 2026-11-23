@@ -79,3 +79,24 @@ test("movimenti tolti o aggiunti a mano", () => {
   assert.equal(jp.lines.find((l) => l.id === home.id)!.reason, "manual");
   assert.equal(jp.total, 1105 - 100 + 30);
 });
+
+test("acquisti online tolti in automatico, bonifici, schede degli esercenti e Maps", () => {
+  const online = tx("B", "2026-04-12", -9.99, "www.amazon.it", "www.amazon.it");
+  const split = tx("B", "2026-04-16", -120, "Split Giappone To Luca Verdi", "Luca Verdi");
+  const shop = tx("B", "2026-04-13", -30, "Nippon Modern", "Nippon Modern");
+  const trip: Trip = { ...japan, config: { ...japan.config, keywords: [...japan.config.keywords!, "Giappone"], places: { "nippon modern": { c: "attrazioni", d: "Museo d'arte", q: "Nippon Modern Museum Tokyo" } } } };
+  const all = [...txs, online, split, shop];
+  let [jp] = computeTrips([trip], all, accounts, "2026-06-04");
+  const l = (t: TripTx) => jp.lines.find((x) => x.id === t.id)!;
+  assert.ok(l(online).excluded && l(online).autoExcluded, "Amazon non è spesa del viaggio");
+  assert.equal(l(split).category, "bonifici");
+  assert.equal(l(split).mapsUrl, null);
+  assert.equal(l(shop).category, "attrazioni");
+  assert.equal(l(shop).info, "Museo d'arte");
+  assert.equal(l(shop).mapsUrl, "https://www.google.com/maps/search/?api=1&query=Nippon%20Modern%20Museum%20Tokyo");
+  assert.match(l(sushi).mapsUrl!, /query=Sushi%20Bar%20Ginza%20Giappone$/);
+  assert.equal(jp.total, 1105 + 120 + 30);
+  // Rimesso a mano: conta.
+  [jp] = computeTrips([{ ...trip, config: { ...trip.config, include: [online.id] } }], all, accounts, "2026-06-04");
+  assert.ok(!l(online).excluded);
+});

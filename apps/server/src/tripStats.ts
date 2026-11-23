@@ -25,13 +25,17 @@ export interface TripConfig {
   keywords?: string[];
   include?: string[];
   exclude?: string[];
+  /** Schede degli esercenti (chiave: placeKey del nome): categoria corretta, breve descrizione, ricerca per Maps. */
+  places?: Record<string, PlaceInfo>;
 }
+export interface PlaceInfo { c?: Category; d?: string; /** Ricerca per Maps; vuota = nessun link. */ q?: string }
 export interface Trip { id: number | string; title: string; config: TripConfig }
 
-export type Category = "alloggio" | "trasporti" | "ristoranti" | "spesa" | "contanti" | "attrazioni" | "acquisti";
+export type Category = "alloggio" | "trasporti" | "ristoranti" | "spesa" | "contanti" | "attrazioni" | "acquisti" | "bonifici";
 export const CATEGORY_LABELS: Record<Category, string> = {
   alloggio: "Alloggio", trasporti: "Viaggio e trasporti", ristoranti: "Ristoranti e caffè", spesa: "Supermercati e konbini",
   contanti: "Prelievi contanti", attrazioni: "Musei e attrazioni", acquisti: "Shopping e altro",
+  bonifici: "Bonifici e spese divise",
 };
 
 export interface TripLine extends TripTx {
@@ -44,6 +48,12 @@ export interface TripLine extends TripTx {
   /** Perché è nel viaggio. */
   reason: "date" | "keyword" | "manual";
   excluded: boolean;
+  /** Tolto in automatico (acquisti online): si può rimettere. */
+  autoExcluded: boolean;
+  /** Breve descrizione di cosa è. */
+  info: string;
+  /** Link a Google Maps per vedere il posto. */
+  mapsUrl: string | null;
 }
 
 export interface TripResult {
@@ -98,14 +108,28 @@ export function merchantName(t: Pick<TripTx, "description" | "counterparty">) {
 const RULES: [Category, RegExp][] = [
   ["contanti", /\bcash at\b|\bprelievo\b|\batm\b/],
   ["alloggio", /hotel|hoteru|\botel\b|hostel|ryokan|booking com|airbnb|\binn\b|guest ?house|apart/],
+  ["ristoranti", /restaurant|ristorante|sushi|ramen|coffee|caffe|cafe|kahve|starbucks|sbx|tully|mcdonald|burger|pizza|bento|izakaya|okonomiyaki|\bbar\b|pastane|lokanta|kebap|doner|saizeriya|menson|kitchen|bistro|gelat|bakery|panificio|pankarato|mychef|autogrill|baklava|cay saati|\bcay\b/],
   ["trasporti", /airline|airways|\bair\b|aeroport|airport|airporter|\bkix\b|\bmxp\b|suica|pasmo|\bjr\b|railway|train|shinkansen|taxi|takushi|uber|bolt|metro|transit|istanbulkart|\bbus\b|ferry|parking|parcheggio|autopark|holafly|esim|wi fi|wifi|pier|ticino srl|car rental|rent a car/],
-  ["attrazioni", /museum|museo|castle|castello|temple|tempio|shrine|jinja|religious|topkapi|teamlab|palace|saray|ticket|biglietto|omairi|baiten|kinkaku|ryoan|tower/],
-  ["spesa", /seven eleven|7 eleven|lawson|familymart|family mart|ministop|supermarket|supermercato|market|migros|\bbim\b|a101|\bsok\b|carrefour|don ?quijote|donki|delica|\bgida\b/],
-  ["ristoranti", /restaurant|ristorante|sushi|ramen|coffee|caffe|cafe|kahve|starbucks|sbx|tully|mcdonald|burger|pizza|bento|izakaya|okonomiyaki|\bbar\b|pastane|lokanta|kebap|doner|saizeriya|menson|kitchen|bistro|gelat|bakery|panificio|pankarato|plusta|baklava|\bcay\b/],
+  ["attrazioni", /museum|museo|muze|castle|castello|temple|tempio|shrine|jinja|religious|topkapi|teamlab|palace|saray|ticket|biglietto|omairi|baiten|kinkaku|ryoan|tower/],
+  ["spesa", /seven eleven|7 eleven|lawson|familymart|family mart|ministop|supermarket|supermercato|market|migros|\bbim\b|a101|\bsok\b|carrefour|don ?quijote|donki|delica|plusta|\bgida\b/],
 ];
+
+/** Chiave dell'esercente per le schede (senza numeri di cassa o filiale). */
+export const placeKey = (merchant: string) => norm(merchant).replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
+
+/** Acquisti online fatti durante il viaggio ma non legati al posto: tolti in automatico (si possono rimettere). */
+const ONLINE = /amazon|kindle|apple com bill|itunes|netflix|spotify|disney|ebay|aliexpress|temu|audible/;
+export const isOnline = (t: Pick<TripTx, "description" | "counterparty">) => ONLINE.test(norm(`${t.counterparty ?? ""} ${t.description ?? ""}`));
+
+const DEFAULT_INFO: Record<Category, string> = {
+  alloggio: "Hotel o alloggio", trasporti: "Trasporti, voli o spostamenti", ristoranti: "Ristorante, bar o caffè", spesa: "Supermercato o minimarket",
+  contanti: "Prelievo di contanti a uno sportello", attrazioni: "Museo, tempio o attrazione", acquisti: "Negozio", bonifici: "Bonifico a una persona o pagamento online",
+};
 
 export function categorize(t: Pick<TripTx, "description" | "counterparty">): Category {
   const s = " " + norm(`${t.counterparty ?? ""} ${t.description ?? ""}`) + " ";
+  // Bonifico Revolut verso una persona o un conto ("Split Istanbul To Mario Rossi").
+  if (/(?:^| )to [a-z]/.test(norm(t.description))) return "bonifici";
   for (const [c, re] of RULES) if (re.test(s)) return c;
   return "acquisti";
 }
@@ -157,6 +181,20 @@ const isRefund = (t: TripTx) => /\b(refund|rimborso|storno|reso)\b/i.test(t.desc
 /** Ultimo giorno del viaggio: se non c'è la data di fine è in corso, fino a oggi. */
 const tripEnd = (c: TripConfig, today: string) => (c.to && c.to >= c.from ? c.to : today);
 
+/** Categoria, descrizione e link a Maps, usando la scheda dell'esercente se c'è. */
+function describe(t: TripTx, c: TripConfig) {
+  const merchant = merchantName(t);
+  const p = c.places?.[placeKey(merchant)];
+  const category = p?.c ?? categorize(t);
+  const where = COUNTRIES.find(([cc]) => cc === c.country)?.[1] ?? "";
+  // Scheda con q vuota: niente Maps (eSIM, app, bonifici).
+  const query = p?.q !== undefined ? p.q || null : (category === "bonifici" || category === "contanti" && !/cash at/i.test(t.description ?? "") ? null : `${merchant.replace(/^(cash at|sq\*|st\*|rakutenpay)\s*/i, "")} ${where}`.trim());
+  return {
+    merchant, category, info: p?.d ?? DEFAULT_INFO[category],
+    mapsUrl: query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : null,
+  };
+}
+
 export function computeTrips(trips: Trip[], txs: TripTx[], accounts: TripAccount[], today: string): TripResult[] {
   const internal = internalIds(txs, accounts);
   const kw = trips.map((tr) => (tr.config.keywords ?? []).map(norm).filter((k) => k.length >= 3));
@@ -192,9 +230,11 @@ export function computeTrips(trips: Trip[], txs: TripTx[], accounts: TripAccount
       if (!manual && !byKeyword && (isHomeDebit(t) || (c.country && c.country !== "IT" && cardCountry(t) === "IT"))) continue;
       if (t.amount === 0) continue;
       if (t.amount > 0 && !manual && !isRefund(t)) continue;
+      const auto = isOnline(t);
       lines.push({
-        ...t, date, spent: round2(-t.amount), category: categorize(t), merchant: merchantName(t),
-        reason: manual ? "manual" : inRange ? "date" : "keyword", excluded: exclude.has(t.id),
+        ...t, date, spent: round2(-t.amount),
+        reason: inRange ? "date" : byKeyword ? "keyword" : "manual", ...describe(t, c),
+        excluded: exclude.has(t.id) || (auto && !manual), autoExcluded: auto,
       });
     }
     lines.sort((a, b) => (a.date === b.date ? b.spent - a.spent : a.date < b.date ? -1 : 1));
