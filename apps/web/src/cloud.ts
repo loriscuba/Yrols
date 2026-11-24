@@ -8,7 +8,12 @@ import { createClient } from "@supabase/supabase-js";
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 export const cloudEnabled = !!(URL_ && KEY);
-export const supabase = cloudEnabled ? createClient(URL_!, KEY!, { db: { schema: "yrols" } }) : null;
+// Chiave di sessione propria: le altre app su loriscuba.github.io usano lo stesso progetto Supabase e la stessa origine,
+// quindi con la chiave predefinita ("sb-<progetto>-auth-token") un login o un'uscita da un'altra app cancellava quella di Yrols.
+export const AUTH_STORAGE_KEY = "yrols-auth";
+export const supabase = cloudEnabled
+  ? createClient(URL_!, KEY!, { db: { schema: "yrols" }, auth: { storageKey: AUTH_STORAGE_KEY, persistSession: true, autoRefreshToken: true } })
+  : null;
 
 const META = {
   billKinds: ["luce", "gas", "acqua", "internet", "telefono", "rifiuti", "condominio", "affitto", "mutuo", "altro"],
