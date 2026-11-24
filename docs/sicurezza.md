@@ -11,6 +11,10 @@
 - **Dispositivo ricordato**: al login la casella "Ricorda questo dispositivo" (spuntata di serie) tiene la sessione
   aperta per 30 giorni dall'ultimo accesso completo; poi di nuovo password e codice. Si attiva o si toglie anche dalla
   pagina Sicurezza ("Questo dispositivo"). "Esci" e "Esci da tutti i dispositivi" lo dimenticano.
+  La sessione è salvata con una chiave propria (`yrols-auth`, in `apps/web/src/cloud.ts`): le altre demo su
+  `loriscuba.github.io` usano lo stesso progetto Supabase e la stessa origine, e con la chiave predefinita un loro
+  login o logout sovrascriveva la sessione di Yrols. Attenzione: un'uscita "globale" (predefinita in supabase-js)
+  da un'altra demo con lo stesso account chiude comunque anche le sessioni di Yrols.
 - **Sblocco rapido** (facoltativo, solo su dispositivo ricordato): dopo 30 minuti di pausa l'app si blocca e si
   riapre con Face ID / Touch ID / impronta (WebAuthn del dispositivo). È un blocco dello schermo locale, non sostituisce
   password e codice: protegge da chi prende in mano il telefono già sbloccato.
