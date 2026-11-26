@@ -5,6 +5,9 @@
 import { supabase } from "./cloud";
 import { earliestNeeded, type Trip, type TripConfig, type TripTx } from "../../server/src/tripStats.ts";
 
+import type { FamilyConfig } from "../../server/src/familyStats.ts";
+
+export { computeFamily, FAMILY_LABELS, type FamilyConfig, type FamilyLine, type FamilyResult, type FamilyCategory } from "../../server/src/familyStats.ts";
 export { computeTrips, CATEGORY_LABELS, COUNTRIES, flag, type Trip, type TripConfig, type TripResult, type TripLine } from "../../server/src/tripStats.ts";
 
 const sb = () => { if (!supabase) throw new Error("Disponibile solo nella versione online"); return supabase; };
@@ -33,9 +36,22 @@ export async function deleteTrip(id: number | string) {
   ok(await sb().from("custom_stats").delete().eq("id", Number(id)));
 }
 
+export interface FamilyStat { id: number; title: string; config: FamilyConfig }
+
+export async function listFamily(): Promise<FamilyStat[]> {
+  const rows = ok(await sb().from("custom_stats").select("id,title,config").eq("kind", "famiglia").order("position").order("id")) as FamilyStat[];
+  return rows;
+}
+
+export async function saveFamily(f: FamilyStat) {
+  ok(await sb().from("custom_stats").update({ title: f.title, config: f.config }).eq("id", f.id));
+}
+
 /** Movimenti dal giorno indicato (a pagine da 1000, il massimo della Data API) e conti propri. */
-export async function loadMovements(trips: Trip[]) {
-  const from = trips.length ? earliestNeeded(trips) : new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+export async function loadMovements(trips: Trip[], months = 0) {
+  const back = new Date(); back.setMonth(back.getMonth() - months);
+  const from = [trips.length ? earliestNeeded(trips) : null, months ? back.toISOString().slice(0, 10) : null]
+    .filter((d): d is string => !!d).sort()[0] ?? new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
   const txs: TripTx[] = [];
   for (let page = 0; page < 20; page++) {
     const rows = ok(await sb().from("yrols_transactions").select("id,accountId,amount,bookingDate,description,counterparty,accountName,bankName")

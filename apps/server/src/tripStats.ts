@@ -76,7 +76,7 @@ const DAY = 864e5;
 const toTime = (iso: string) => new Date(iso.slice(0, 10) + "T00:00:00Z").getTime();
 const addDays = (iso: string, n: number) => new Date(toTime(iso) + n * DAY).toISOString().slice(0, 10);
 const dayDiff = (a: string, b: string) => Math.round((toTime(a) - toTime(b)) / DAY);
-const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9& ]+/g, " ").replace(/\s+/g, " ").trim();
+export const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9& ]+/g, " ").replace(/\s+/g, " ").trim();
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Data dell'operazione: le carte Fineco la scrivono nella descrizione ("Data operazione 20/11/26"). */
@@ -176,7 +176,7 @@ export function internalIds(txs: TripTx[], accounts: TripAccount[]) {
 const HOME_DEBIT = /addebito sdd|sepa direct debit|data inserimento|piano bonifico|rata pac|estratto conto|canone mensile|\bf24\b|bollettino/i;
 export const isHomeDebit = (t: Pick<TripTx, "description">) => HOME_DEBIT.test(t.description ?? "");
 
-const isRefund = (t: TripTx) => /\b(refund|rimborso|storno|reso)\b/i.test(t.description ?? "");
+export const isRefund = (t: TripTx) => /\b(refund|rimborso|storno|reso)\b/i.test(t.description ?? "");
 
 /** Ultimo giorno del viaggio: se non c'è la data di fine è in corso, fino a oggi. */
 const tripEnd = (c: TripConfig, today: string) => (c.to && c.to >= c.from ? c.to : today);

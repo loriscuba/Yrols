@@ -487,3 +487,10 @@ a.btn { text-decoration: none; color: inherit; justify-content: center; }
 .mov-detail p { margin: 0; }
 .mov-detail .hint { overflow-wrap: anywhere; }
 @media (max-width: 600px) { .cat-row { grid-template-columns: 110px 1fr 84px; gap: 8px; } }
+
+.advice-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; }
+.advice-item > svg { flex: none; color: var(--series-2); margin-top: 2px; }
+.advice-item .num { display: flex; flex-direction: column; align-items: flex-end; white-space: nowrap; }
+.advice-text { display: block; color: var(--text-secondary); font-size: 14px; line-height: 1.45; margin-top: 2px; }
+.stat-section { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+.stat-section > .hint { margin: -4px 0 0; }

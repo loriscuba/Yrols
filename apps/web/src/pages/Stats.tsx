@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart3, ChevronDown, ChevronRight, Eye, EyeOff, MapPin, Pencil, Plane, Plus, Search, Trash2 } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BarChart3, ChevronDown, ChevronRight, Eye, EyeOff, Lightbulb, MapPin, Pencil, Plane, Plus, Search, Trash2, Users } from "lucide-react";
 import { cloudEnabled } from "../cloud";
 import { date, money, moneyShort, todayIso } from "../format";
 import { Card, Empty, ErrorBanner, Field, Modal, Stat } from "../components/ui";
-import { computeTrips, COUNTRIES, deleteTrip, flag, listTrips, loadMovements, saveTrip, type Trip, type TripLine, type TripResult, CATEGORY_LABELS } from "../stats";
+import { computeTrips, COUNTRIES, deleteTrip, flag, listTrips, loadMovements, saveTrip, type Trip, type TripLine, type TripResult, CATEGORY_LABELS,
+  computeFamily, FAMILY_LABELS, listFamily, saveFamily, type FamilyStat, type FamilyLine, type FamilyResult } from "../stats";
 
 type Data = Awaited<ReturnType<typeof loadMovements>>;
 
@@ -18,12 +19,14 @@ export function StatsPage() {
   const [missing, setMissing] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [edit, setEdit] = useState<Trip | "new" | null>(null);
+  const [family, setFamily] = useState<FamilyStat[]>([]);
 
   const reload = async () => {
     try {
-      const t = await listTrips();
+      const [t, f] = await Promise.all([listTrips(), listFamily()]);
       setTrips(t);
-      setData(await loadMovements(t));
+      setFamily(f);
+      setData(await loadMovements(t, Math.max(0, ...f.map((x) => x.config.months ?? 12))));
       setErr(null);
     } catch (e) {
       if ((e as Error).message === "MISSING_TABLE") setMissing(true); else setErr((e as Error).message);
@@ -32,6 +35,8 @@ export function StatsPage() {
   useEffect(() => { if (cloudEnabled) reload(); }, []);
 
   const results = useMemo(() => (trips && data ? computeTrips(trips, data.txs, data.accounts, todayIso()) : null), [trips, data]);
+  const familyResults = useMemo(() => (results && data
+    ? family.map((f) => ({ stat: f, r: computeFamily(f.config, data.txs, data.accounts, results, todayIso()) })) : []), [family, results, data]);
   const current = results?.find((r) => String(r.trip.id) === sel) ?? results?.[results.length - 1] ?? null;
 
   // Togliere o rimettere un movimento si vede subito; il salvataggio va in sottofondo.
@@ -42,6 +47,13 @@ export function StatsPage() {
     const next = { ...trip, config: { ...trip.config, exclude: [...exclude], include: [...include] } };
     setTrips((ts) => ts?.map((t) => (t.id === trip.id ? next : t)) ?? null);
     try { await saveTrip(next); } catch (e) { setErr((e as Error).message); reload(); }
+  };
+  const toggleFamily = async (f: FamilyStat, l: FamilyLine) => {
+    const exclude = new Set(f.config.exclude ?? []);
+    if (l.excluded) exclude.delete(l.id); else exclude.add(l.id);
+    const next = { ...f, config: { ...f.config, exclude: [...exclude] } };
+    setFamily((fs) => fs.map((x) => (x.id === f.id ? next : x)));
+    try { await saveFamily(next); } catch (e) { setErr((e as Error).message); reload(); }
   };
 
   if (!cloudEnabled) {
@@ -83,11 +95,139 @@ export function StatsPage() {
           )}
         </>
       )}
+      {!missing && familyResults.map(({ stat, r }) => (
+        <section key={stat.id} className="stat-section">
+          <h2 className="section-title"><Users size={18} aria-hidden />{stat.title}</h2>
+          <FamilyDetail r={r} stat={stat} onToggle={(l) => toggleFamily(stat, l)} />
+        </section>
+      ))}
       {edit && data && (
         <TripForm trip={edit === "new" ? null : edit} data={data} onClose={() => setEdit(null)}
           onSaved={(id) => { setEdit(null); if (id !== undefined) setSel(String(id)); reload(); }} />
       )}
     </div>
+  );
+}
+
+const monthLabel = (m: string) => date(m + "-01", { month: "short" });
+
+function FamilyDetail({ r, stat, onToggle }: { r: FamilyResult; stat: FamilyStat; onToggle: (l: FamilyLine) => void }) {
+  const [openCat, setOpenCat] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const trips = r.byCategory.find((c) => c.category === "viaggi")?.total ?? 0;
+  const home = Math.round((r.total - trips) * 100) / 100;
+  const rest = r.byCategory.filter((c) => c.category !== "viaggi");
+  const maxCat = Math.max(...rest.map((c) => c.total), 1);
+  const wanted = stat.config.months ?? 12;
+  const short = r.months < wanted - 0.5;
+  const chart = r.byMonth.map((m) => ({ month: m.month, casa: Math.round((m.total - (m.viaggi ?? 0)) * 100) / 100, viaggi: m.viaggi ?? 0 }));
+  // Le spese delle vacanze hanno già la loro statistica: qui restano solo nel totale e nel grafico.
+  const everyday = r.lines.filter((l) => l.category !== "viaggi");
+  const lines = showAll ? everyday : everyday.slice(0, 25);
+  const advice = stat.config.advice ?? [];
+  const saving = advice.reduce((s, a) => s + (a.saving ?? 0), 0);
+  return (
+    <>
+      <div className="stats">
+        <Stat label="Spesa di tutti i giorni" value={money(home / r.months)} hint={`al mese · ${money(home)} in tutto, senza le vacanze`} />
+        <Stat label="Vacanze" value={money(trips)} hint="spese dal conto durante i viaggi" />
+        <Stat label="Risparmio possibile" value={saving ? money(saving) : "—"} hint={saving ? "all'anno, seguendo i consigli" : "consigli in arrivo"} />
+      </div>
+      <p className="hint">Movimenti dal {date(r.from)} a oggi ({r.count} spese).{short && ` La banca dà i movimenti solo da questa data: la statistica si allunga da sola fino a ${wanted} mesi.`} Giroconti tra i vostri conti ed entrate non contano.</p>
+      {advice.length > 0 && (
+        <Card title="Dove potete risparmiare">
+          <ul className="list advice">
+            {advice.map((a) => (
+              <li key={a.title} className="advice-item">
+                <Lightbulb size={18} aria-hidden />
+                <span className="row-main"><span className="row-title">{a.title}</span><span className="advice-text">{a.text}</span></span>
+                {a.saving ? <span className="num pos">{money(a.saving)}<span className="row-sub">all'anno</span></span> : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <div className="grid-2">
+        <Card title="Per tipo di spesa">
+          <p className="hint">Tocca un tipo di spesa per vedere i movimenti. A destra la media al mese.</p>
+          <ul className="hbars cat-bars">
+            {rest.map((c) => {
+              const open = openCat === c.category;
+              return (
+                <li key={c.category}>
+                  <button className="cat-row" aria-expanded={open} onClick={() => setOpenCat(open ? null : c.category)} title={`${c.label}: ${money(c.total)} in ${c.count} spese`}>
+                    <span className="hbar-label">{open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}{c.label}</span>
+                    <span className="hbar-track"><span className="hbar-fill" style={{ width: `${(c.total / maxCat) * 100}%` }} /></span>
+                    <span className="hbar-value">{money(c.perMonth)}</span>
+                  </button>
+                  {open && (
+                    <ul className="list cat-items">
+                      {r.lines.filter((l) => l.category === c.category && !l.excluded).map((l) => <FamilyRow key={l.id} l={l} onToggle={onToggle} compact />)}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+        <Card title="Dove spendete di più">
+          <ul className="list">
+            {r.topMerchants.map((m) => (
+              <li key={m.merchant} className="row">
+                <span className="row-main"><span className="row-title">{m.merchant}</span><span className="row-sub">{m.count} {m.count === 1 ? "pagamento" : "pagamenti"}</span></span>
+                <span className="num">{money(m.total)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+      <Card title="Mese per mese">
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="25%">
+            <CartesianGrid vertical={false} stroke="var(--grid)" />
+            <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={monthLabel} />
+            <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} width={64} tickFormatter={moneyShort} />
+            <Tooltip cursor={{ fill: "var(--hover)" }} labelFormatter={(m) => date(String(m) + "-01", { month: "long", year: "numeric" })}
+              formatter={(v, name) => [money(Number(v)), name === "casa" ? "Tutti i giorni" : "Vacanze"]}
+              contentStyle={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13 }} />
+            <Legend formatter={(v) => (v === "casa" ? "Tutti i giorni" : "Vacanze")} wrapperStyle={{ fontSize: 13 }} />
+            <Bar dataKey="casa" stackId="m" fill="var(--series-1)" maxBarSize={40} />
+            <Bar dataKey="viaggi" stackId="m" fill="var(--series-2)" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+      <Card title={`Spese di tutti i giorni (${everyday.length})`}>
+        <p className="hint">Tocca un movimento per i dettagli. Con l'occhio lo togli dal conto (o lo rimetti). Le spese delle vacanze sono nella Statistica Vacanza.</p>
+        <ul className="list">{lines.map((l) => <FamilyRow key={l.id} l={l} onToggle={onToggle} />)}</ul>
+        {everyday.length > 25 && <button className="btn" onClick={() => setShowAll(!showAll)}>{showAll ? "Mostra meno" : `Mostra tutti i ${everyday.length}`}</button>}
+      </Card>
+    </>
+  );
+}
+
+function FamilyRow({ l, onToggle, compact }: { l: FamilyLine; onToggle: (l: FamilyLine) => void; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className={`mov ${l.excluded ? "muted" : ""}`}>
+      <div className="row">
+        <button className="row-btn mov-main" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span className="row-main">
+            <span className="row-title">{l.merchant}</span>
+            <span className="row-sub">{shortDate(l.date)}{!compact && <> · <span className="badge neutral">{FAMILY_LABELS[l.category]}</span></>}</span>
+          </span>
+          <span className={`num ${l.spent < 0 ? "pos" : ""}`}>{l.spent < 0 ? `+${money(-l.spent)}` : money(l.spent)}</span>
+        </button>
+        <button className="icon-btn" onClick={() => onToggle(l)} aria-label={l.excluded ? "Rimetti nel conto" : "Togli dal conto"} title={l.excluded ? "Rimetti nel conto" : "Togli dal conto"}>
+          {l.excluded ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </div>
+      {open && (
+        <div className="mov-detail">
+          {l.info && <p>{l.info}</p>}
+          <p className="hint">{date(l.date, { weekday: "long", day: "numeric", month: "long" })} · «{l.description}»</p>
+        </div>
+      )}
+    </li>
   );
 }
 
