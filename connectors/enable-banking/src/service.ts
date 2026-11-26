@@ -182,7 +182,10 @@ export class BankingService {
     const payload: SyncPayload = {
       source: "enablebanking",
       syncedAt: now.toISOString(),
-      connections: connections.map(({ accounts: _a, createdAt: _c, ...rest }) => rest),
+      // validUntil vuoto → omesso: il database lo tiene com'è (una stringa vuota non è una data valida).
+      connections: connections.map(({ accounts: _a, createdAt: _c, validUntil, ...rest }) =>
+        (validUntil ? { ...rest, validUntil } : rest) as Connection,
+      ),
       accounts: [],
       balances: [],
       transactions: [],
