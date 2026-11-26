@@ -102,3 +102,37 @@ test("config: con Supabase le connessioni arrivano dal database se EB_STATE manc
   assert.deepEqual(loadConfig(base).supabaseStore, { url: "https://x.supabase.co", serviceKey: "k", schema: "yrols" });
   assert.equal(loadConfig({ ...base, CONNECTIONS_SOURCE: "file" }).supabaseStore, undefined);
 });
+
+test("SupabaseStore + sync: Scalable (senza scadenza) escluso, nessun validUntil vuoto nel push", async () => {
+  const { SupabaseStore } = await import("../src/supabase.js");
+  const { BankingService } = await import("../src/service.js");
+  const { EnableBankingClient } = await import("../src/client.js");
+  const db = mockFetch((c) => {
+    if (c.url.pathname.endsWith("/bank_connections"))
+      return { body: [
+        { id: "scalable", bank_name: "Scalable Capital", country: "DE", valid_until: null, status: "active" },
+        { id: "s2", bank_name: "Revolut", country: "IT", valid_until: "2099-01-01T00:00:00Z", status: "active" },
+        { id: "s3", bank_name: "Senza scadenza", country: "IT", valid_until: null, status: "active" },
+      ] };
+    if (c.url.pathname.endsWith("/bank_accounts"))
+      return { body: [
+        { id: "sc-1", connection_id: "scalable", bank_name: "Scalable Capital", name: "Depot", iban: null, currency: "EUR", eb_uid: null, source: "scalable" },
+        { id: "r-1", connection_id: "s2", bank_name: "Revolut", name: "Conto", iban: null, currency: "EUR", eb_uid: null, source: "enablebanking" },
+      ] };
+    return undefined;
+  });
+  const store = new SupabaseStore({ url: "https://x.supabase.co", serviceKey: "k", schema: "yrols", fetch: db.fetch });
+  const data = await store.load();
+  assert.deepEqual(data.connections.map((c) => c.id), ["s2", "s3"]);
+
+  const eb = mockFetch((c) => {
+    if (c.url.pathname.endsWith("/balances")) return { body: { balances: [] } };
+    if (c.url.pathname.endsWith("/transactions")) return { body: { transactions: [] } };
+    return undefined;
+  });
+  const svc = new BankingService({ client: new EnableBankingClient({ applicationId: "a", privateKey, baseUrl: "https://api.test", fetch: eb.fetch }), store, redirectUrl: "x" });
+  const { payload } = await svc.buildSyncPayload();
+  assert.deepEqual(payload.connections!.map((c) => c.id), ["s2", "s3"]);
+  assert.equal(payload.connections![1]!.validUntil, undefined);
+  assert.ok(!JSON.stringify(payload).includes('"validUntil":""'));
+});

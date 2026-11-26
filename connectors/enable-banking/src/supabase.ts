@@ -40,7 +40,7 @@ export async function pushToSupabase(payload: SyncPayload, opts: SupabasePushOpt
 
 
 interface ConnRow { id: string; bank_name: string | null; country: string | null; valid_until: string | null; status: string | null; updated_at?: string }
-interface AccRow { id: string; connection_id: string | null; bank_name: string | null; name: string | null; iban: string | null; currency: string | null; eb_uid: string | null }
+interface AccRow { id: string; connection_id: string | null; bank_name: string | null; name: string | null; iban: string | null; currency: string | null; eb_uid: string | null; source?: string | null }
 
 /**
  * Legge le connessioni bancarie dal database del cruscotto (tabelle bank_connections e bank_accounts),
@@ -71,9 +71,16 @@ export class SupabaseStore implements ConnectorStore {
   async load(): Promise<StoreData> {
     const [conns, accs] = await Promise.all([
       this.get<ConnRow[]>("bank_connections?select=id,bank_name,country,valid_until,status,updated_at&status=neq.revoked"),
-      this.get<AccRow[]>("bank_accounts?select=id,connection_id,bank_name,name,iban,currency,eb_uid&source=eq.enablebanking"),
+      this.get<AccRow[]>("bank_accounts?select=id,connection_id,bank_name,name,iban,currency,eb_uid,source"),
     ]);
-    const connections: StoredConnection[] = conns.map((c) => ({
+    const isEb = (a: AccRow) => (a.source ?? "enablebanking") === "enablebanking";
+    // Le connessioni di altre fonti (es. Scalable Capital, senza scadenza) non sono di Enable Banking:
+    // la sync non le deve leggere né rimandare al database.
+    const ebConns = conns.filter((c) => {
+      const own = accs.filter((a) => a.connection_id === c.id);
+      return own.length === 0 || own.some(isEb);
+    });
+    const connections: StoredConnection[] = ebConns.map((c) => ({
       id: c.id,
       bankName: c.bank_name ?? "",
       country: c.country ?? "",
@@ -81,7 +88,7 @@ export class SupabaseStore implements ConnectorStore {
       status: c.status === "expired" ? "expired" : "active",
       createdAt: c.updated_at ?? "",
       accounts: accs
-        .filter((a) => a.connection_id === c.id)
+        .filter((a) => a.connection_id === c.id && isEb(a))
         .map((a) => ({
           id: a.id,
           connectionId: c.id,
