@@ -112,6 +112,8 @@ function toIso(y: number, m: number, d: number) {
 }
 
 const DATE_RE = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})|(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{4})/gi;
+// "Scadenza condizioni economiche / offerta / contratto" non è una scadenza di pagamento.
+const NOT_DUE = /scadenza\s+(?:delle\s+)?(?:condizioni|offert|contratt|prezz|promo)[^\n]*\n?[^\n]*$/i;
 const KEY_DUE = /(scadenz|scade|entro (il|e non oltre)?|da pagare entro|data (di )?addebito|verrà addebitat|pagare entro)/i;
 
 /** Data di scadenza; con onlyKeyed solo se preceduta da "scadenza", "entro il", "addebito"… */
@@ -121,7 +123,7 @@ export function findDueDate(text: string, onlyKeyed = false): string | null {
     const iso = m[1] ? toIso(+m[3], +m[2], +m[1]) : toIso(+m[6], MONTHS[m[5].toLowerCase()], +m[4]);
     if (!iso) continue;
     const before = text.slice(Math.max(0, m.index! - 50), m.index!);
-    if (KEY_DUE.test(before)) return iso;
+    if (KEY_DUE.test(before) && !NOT_DUE.test(before)) return iso;
     fallback ??= iso;
   }
   return onlyKeyed ? null : fallback;

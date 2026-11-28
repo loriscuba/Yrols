@@ -65,14 +65,20 @@ const TOTAL_LABELS = [
   /saldo\s+finale/, /totale\s+da\s+pagare/, /importo\s+da\s+pagare/, /totale\s+(?:della\s+)?(?:fattura|bolletta|documento|conto)/, /da\s+pagare/, /totale\s+dovuto/,
   /importo\s+(?:totale|complessivo)(?:\s+dovuto)?/, /importo\s+(?:della\s+)?rata\s+unica/, /rata\s+unica/, /totale\s+avviso/,
 ];
-const DUE_LABELS = [/data\s+(?:di\s+)?scadenza/, /\bscad\.?(?=\s)/, /scadenza\s+(?:pagamento|fattura|bolletta)?/, /(?:da\s+pagare|pagare)\s+entro(?:\s+il)?/, /entro\s+il/];
+// "Scadenza condizioni economiche/offerta/contratto" (es. Sorgenia, 30/06/2027) non è la scadenza di pagamento.
+const NOT_PAYMENT = "(?!\\s+(?:delle\\s+)?(?:condizioni|offert|contratt|prezz|promo|sconto|bonus))";
+const DUE_LABELS = [
+  /data\s+(?:di\s+)?scadenza(?:\s+(?:pagamento|fattura|bolletta))?/, /(?:da\s+(?:pagare|saldare|versare)|pagare|saldare|pagamento)\s+entro(?:\s+il)?/,
+  /\bscad\.?(?=\s)/, new RegExp("scadenza" + NOT_PAYMENT + "(?:\\s+(?:pagamento|fattura|bolletta))?"), /entro\s+il/,
+];
 const ISSUE_LABELS = [/emessa\s+il/, /data\s+(?:di\s+)?emissione/, /data\s+fattura/, /fattura\s+(?:n\.?|nr\.?|numero)\s*\S+\s+del/];
 
 export function parseInvoice(text: string): Invoice {
   const t = text.replace(/ /g, " ");
   const known = PROVIDERS.find(([re]) => re.test(t.slice(0, 600))) ?? PROVIDERS.find(([re]) => re.test(t));
 
-  const num = t.match(/fattura\s*(?:n\.?|n°|nr\.?|numero)\s*:?\s*([A-Z]{0,4}[\w/\-.]*\d[\w/\-]*)/i);
+  const num = t.match(/fattura\s*(?:n\.?|n°|nr\.?|numero)\s*:?\s*([A-Z]{0,4}[\w/\-.]*\d[\w/\-]*)/i)
+    ?? t.match(/\b(?:n\.?|n°|nr\.?|numero)\s*(?:della\s+)?fattura(?:\s+elettronica)?\s*:?\s*([A-Z]{0,4}[\w/\-.]*\d[\w/\-]*)/i);
 
   let amount: number | null = null;
   for (const l of TOTAL_LABELS) if ((amount = amountAfter(t, l)) !== null) break;
@@ -94,6 +100,16 @@ export function parseInvoice(text: string): Invoice {
     if (periodFrom && periodTo) break;
   }
 
+  // Periodo di un solo mese scritto a lettere: "Periodo di fatturazione   Ottobre 2026" (Sorgenia).
+  if (!periodFrom || !periodTo) {
+    const mm = t.match(new RegExp(`periodo\\s+di\\s+(?:fatturazione|riferimento|competenza)\\s*:?\\s*${MONTH_WORD}\\s+(\\d{4})`, "i"));
+    if (mm) {
+      const mo = MONTHS[mm[1]!.slice(0, 3).toLowerCase()]!, y = +mm[2]!;
+      periodFrom = new Date(Date.UTC(y, mo - 1, 1)).toISOString().slice(0, 10);
+      periodTo = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
+    }
+  }
+
   // Voci di costo: "Descrizione   € 33,95   22%" (oppure "33,95 €"), con aliquota IVA in fondo alla riga.
   const items: InvoiceItem[] = [];
   const itemRe = new RegExp(`^(.*?[A-Za-zÀ-ú].*?)\\s{2,}(?:€\\s*)?${AMOUNT}\\s*(?:€)?\\s{2,}(\\d{1,2})\\s?%\\s*$`);
@@ -111,10 +127,18 @@ export function parseInvoice(text: string): Invoice {
 
   return {
     provider: tributo?.[0] ?? known?.[1] ?? null,
-    kind: tributo?.[1] ?? known?.[2] ?? null,
+    kind: tributo?.[1] ?? energyKind(t, known?.[2]) ?? null,
     invoiceNumber: num?.[1] ?? null,
     issueDate, dueDate, periodFrom, periodTo, amount, items,
   };
+}
+
+/** Fornitori di luce e gas (Sorgenia, Enel, Eni…) mandano bollette separate: il servizio si legge dal testo. */
+function energyKind(t: string, kind: string | undefined): string | undefined {
+  if (kind !== "luce" && kind !== "gas") return kind;
+  const head = t.slice(0, 1500);
+  const gas = /gas\s+naturale|servizio\s+gas|\bsmc\b|\bpdr\b/i.test(head), luce = /energia\s+elettrica|\bkwh\b|\bpod\b/i.test(head);
+  return gas && !luce ? "gas" : luce && !gas ? "luce" : kind;
 }
 
 // Riga della sezione tributi locali di un F24: "EL   3944   H123 ... 2026   220 60" (anche senza la scritta F24,
