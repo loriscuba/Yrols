@@ -74,3 +74,32 @@ test("avviso TARI: importo totale dovuto e rata unica", () => {
   assert.equal(inv.amount, 312);
   assert.equal(inv.dueDate, "2026-12-02");
 });
+
+// Prima pagina di una bolletta Sorgenia (dati inventati), come la ricostruisce pdfText().
+const SORGENIA = (servizio: string, unita: string) => `COPIA DETTAGLIO
+CODICE CLIENTE   OFFERTA COMMERCIALE
+1234567   Offerta Prova
+CODICE UTENZA   SCADENZA CONDIZIONI ECONOMICHE
+PR0000001   30/06/2027
+SERVIZIO ${servizio} MERCATO LIBERO
+Mario Rossi
+N. fattura elettronica   V000000000001
+valida ai fini fiscali   MARIO ROSSI
+Emessa il   21/11/2026   VIA ROMA 1
+DA SALDARE ENTRO
+TOTALE DA PAGARE   51,90 €
+11/12/2026
+Periodo di fatturazione   Ottobre 2026
+Consumo totale del periodo fatturato   110,6 ${unita}
+Alla data del 21/11/2026
+i pagamenti risultano
+customercare@sorgenia.it`;
+
+test("Sorgenia: scadenza 'da saldare entro', non la scadenza delle condizioni economiche", () => {
+  const inv = parseInvoice(SORGENIA("ENERGIA ELETTRICA", "kWh"));
+  assert.deepEqual({ ...inv, items: undefined }, {
+    provider: "Sorgenia", kind: "luce", invoiceNumber: "V000000000001", issueDate: "2026-11-21", dueDate: "2026-12-11",
+    periodFrom: "2026-10-01", periodTo: "2026-10-31", amount: 51.9, items: undefined,
+  });
+  assert.equal(parseInvoice(SORGENIA("GAS NATURALE", "Smc")).kind, "gas");
+});

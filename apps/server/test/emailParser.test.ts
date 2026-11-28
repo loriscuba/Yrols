@@ -12,6 +12,7 @@ test("importi in formato italiano", () => {
 test("date di scadenza", () => {
   assert.equal(findDueDate("Emessa il 01/10/2026, da pagare entro il 20/11/2026"), "2026-11-20");
   assert.equal(findDueDate("scade il 5 dicembre 2026"), "2026-12-05");
+  assert.equal(findDueDate("SCADENZA CONDIZIONI ECONOMICHE\nPR0000001   30/06/2027\nDa saldare entro 11/12/2026"), "2026-12-11");
   assert.equal(findDueDate("data 31/02/2026"), null);
 });
 
